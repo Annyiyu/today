@@ -242,13 +242,22 @@ body.dragging{ cursor:grabbing; user-select:none; }
 .river-row{ display:flex; align-items:center; gap:8px; }
 .river-lab{ font-family:var(--zh); font-size:11px; color:var(--ink-soft); width:18px; flex-shrink:0; }
 .river-bar{ flex:1; height:15px; border-radius:8px; overflow:hidden; }
-.ringwrap{ display:flex; align-items:center; gap:20px; }
-.rlegend{ flex:1; display:flex; flex-direction:column; gap:6px; }
+.ringwrap{ display:flex; align-items:flex-start; gap:20px; }
+.ringwrap #ringsvg{ flex-shrink:0; }
+.rlegend{ flex:1; padding-top:4px; display:flex; flex-direction:column; gap:6px; }
 .litem{ display:flex; align-items:center; gap:7px; font-family:var(--zh); font-size:12px; color:var(--ink-soft); }
 .ldot{ width:9px; height:9px; border-radius:3px; flex-shrink:0; }
 .lcount{ margin-left:auto; color:var(--ink-faint); font-family:var(--display); font-weight:600; font-size:11.5px; }
 .rempty{ font-family:var(--zh); font-size:12.5px; color:var(--ink-faint); text-align:center; padding:18px; }
 .ring-header{ font-family:var(--zh); font-size:12px; color:var(--ink-soft); margin-bottom:14px; text-align:center; }
+.ring-tip{ position:fixed; z-index:300; background:var(--ink); color:var(--bg); font-family:var(--zh); font-size:12px; padding:6px 11px; border-radius:8px; pointer-events:none; opacity:0; transition:opacity 0.15s; white-space:nowrap; display:flex; align-items:center; gap:6px; box-shadow:0 4px 14px rgba(0,0,0,0.2); }
+.ring-tip.show{ opacity:1; }
+.rt-dot{ width:8px; height:8px; border-radius:50%; flex-shrink:0; }
+.leg-toggle{ font-family:var(--zh); font-size:12px; color:var(--ink-soft); cursor:pointer; background:none; border:none; padding:6px 4px; display:inline-flex; align-items:center; gap:6px; transition:color 0.2s; }
+.leg-toggle:hover{ color:var(--accent-deep); }
+.leg-toggle .caret{ display:inline-block; transition:transform 0.2s; font-size:10px; }
+.leg-toggle.open .caret{ transform:rotate(90deg); }
+.leg-list{ display:flex; flex-direction:column; gap:6px; margin-top:8px; animation:fadeIn 0.25s; }
 
 .diary-head{ font-family:var(--hand); font-size:38px; color:var(--ink); position:relative; z-index:1; }
 .diary-sub{ font-family:var(--zh); font-size:12.5px; color:var(--ink-soft); margin-top:7px; margin-bottom:20px; position:relative; z-index:1; }
@@ -930,6 +939,7 @@ function renderWeave(){ const box=document.getElementById('weave'); box.innerHTM
     } else { const e=document.createElement('div'); e.className='wempty'+(k===viewDate?' viewing':''); e.title=k; e.onclick=()=>{viewDate=k;switchDay();}; box.appendChild(e); } }
   box.scrollLeft=box.scrollWidth; const w=Object.values(state.days).filter(d=>d.entries&&d.entries.length>0).length;
   document.getElementById('wcap').textContent=w>0?`已经记下 ${w} 天的颜色`:'记几天，这里会织出你生活的颜色'; }
+let ringLegendOpen=false;
 function renderRing(){ const counts={}; let tagTotal=0; let entryCount=0; const today=new Date(); today.setHours(0,0,0,0); const start=new Date(today); start.setDate(today.getDate()-29);
   for(const k in state.days){ const d=parseKey(k); if(d>=start&&d<=today){(state.days[k].entries||[]).forEach(en=>{ entryCount++; (en.tags||[]).forEach(t=>{counts[t]=(counts[t]||0)+1;tagTotal++;});});} }
   const svgBox=document.getElementById('ringsvg'); const lg=document.getElementById('rleg');
@@ -937,9 +947,36 @@ function renderRing(){ const counts={}; let tagTotal=0; let entryCount=0; const 
   if(tagTotal===0){svgBox.innerHTML=`<svg width="132" height="132" viewBox="0 0 132 132"><circle cx="66" cy="66" r="52" fill="none" stroke="rgba(80,75,95,0.08)" stroke-width="20"/><text x="66" y="62" text-anchor="middle" font-family="Quicksand" font-weight="700" font-size="22" fill="#4a4754">${entryCount}</text><text x="66" y="80" text-anchor="middle" font-family="LXGW WenKai TC" font-size="11" fill="#918d9c">件事</text></svg>`;lg.innerHTML='<div class="rempty zh">这些事还没打标签<br>打了标签，色环就有颜色啦</div>';return;}
   const ranked=state.tags.filter(t=>counts[t.id]).sort((a,b)=>counts[b.id]-counts[a.id]);
   let ang=-90; const R=52,cx=66,cy=66,sw=20; let paths='';
-  ranked.forEach(t=>{const frac=counts[t.id]/tagTotal;const sweep=frac*360;const a0=ang*Math.PI/180,a1=(ang+sweep)*Math.PI/180;const x0=cx+R*Math.cos(a0),y0=cy+R*Math.sin(a0),x1=cx+R*Math.cos(a1),y1=cy+R*Math.sin(a1);const large=sweep>180?1:0;paths+=`<path d="M ${x0} ${y0} A ${R} ${R} 0 ${large} 1 ${x1} ${y1}" fill="none" stroke="${t.raw}" stroke-width="${sw}"/>`;ang+=sweep;});
-  svgBox.innerHTML=`<svg width="132" height="132" viewBox="0 0 132 132">${paths}<text x="66" y="62" text-anchor="middle" font-family="Quicksand" font-weight="700" font-size="22" fill="#4a4754">${entryCount}</text><text x="66" y="80" text-anchor="middle" font-family="LXGW WenKai TC" font-size="11" fill="#918d9c">件事</text></svg>`;
-  lg.innerHTML=''; ranked.forEach(t=>{const it=document.createElement('div');it.className='litem';it.innerHTML=`<span class="ldot" style="background:${t.raw}"></span>${esc(t.label)}<span class="lcount">${counts[t.id]}</span>`;lg.appendChild(it);}); }
+  ranked.forEach((t,i)=>{const frac=counts[t.id]/tagTotal;const sweep=frac*360;const a0=ang*Math.PI/180,a1=(ang+sweep)*Math.PI/180;const x0=cx+R*Math.cos(a0),y0=cy+R*Math.sin(a0),x1=cx+R*Math.cos(a1),y1=cy+R*Math.sin(a1);const large=sweep>180?1:0;
+    paths+=`<path class="ring-arc" data-tid="${t.id}" d="M ${x0} ${y0} A ${R} ${R} 0 ${large} 1 ${x1} ${y1}" fill="none" stroke="${t.raw}" stroke-width="${sw}" stroke-linecap="butt"/>`;ang+=sweep;});
+  svgBox.innerHTML=`<svg width="132" height="132" viewBox="0 0 132 132">${paths}<text id="ring-center-num" x="66" y="62" text-anchor="middle" font-family="Quicksand" font-weight="700" font-size="22" fill="#4a4754">${entryCount}</text><text id="ring-center-lab" x="66" y="80" text-anchor="middle" font-family="LXGW WenKai TC" font-size="11" fill="#918d9c">件事</text></svg>`;
+  // tooltip element
+  let tip=document.getElementById('ring-tip'); if(!tip){ tip=document.createElement('div'); tip.id='ring-tip'; tip.className='ring-tip'; document.body.appendChild(tip); }
+  const numEl=svgBox.querySelector('#ring-center-num'), labEl=svgBox.querySelector('#ring-center-lab');
+  function activate(tid,clientX,clientY){ const t=tagById(tid); if(!t)return;
+    svgBox.querySelectorAll('.ring-arc').forEach(a=>{ a.style.opacity=a.dataset.tid===tid?'1':'0.32'; a.style.strokeWidth=a.dataset.tid===tid?'24':'20'; });
+    tip.innerHTML=`<span class="rt-dot" style="background:${t.raw}"></span>${esc(t.label)} · ${counts[tid]}`; tip.classList.add('show');
+    if(clientX!=null){ tip.style.left=(clientX+14)+'px'; tip.style.top=(clientY-10)+'px'; }
+  }
+  function deactivate(){ svgBox.querySelectorAll('.ring-arc').forEach(a=>{ a.style.opacity='1'; a.style.strokeWidth='20'; }); tip.classList.remove('show'); }
+  svgBox.querySelectorAll('.ring-arc').forEach(arc=>{
+    arc.style.cursor='pointer'; arc.style.transition='opacity 0.15s, stroke-width 0.15s';
+    arc.addEventListener('mouseenter',e=>activate(arc.dataset.tid,e.clientX,e.clientY));
+    arc.addEventListener('mousemove',e=>{ tip.style.left=(e.clientX+14)+'px'; tip.style.top=(e.clientY-10)+'px'; });
+    arc.addEventListener('mouseleave',deactivate);
+    arc.addEventListener('click',e=>{ e.stopPropagation(); const r=arc.getBoundingClientRect(); activate(arc.dataset.tid, e.clientX, e.clientY); }); // mobile tap
+  });
+  svgBox.addEventListener('click',e=>{ if(!e.target.classList.contains('ring-arc')) deactivate(); });
+  // collapsible legend
+  lg.innerHTML='';
+  const toggle=document.createElement('button'); toggle.className='leg-toggle zh'+(ringLegendOpen?' open':'');
+  toggle.innerHTML=`<span class="caret">▸</span> 明细（${ranked.length}）`;
+  toggle.onclick=()=>{ ringLegendOpen=!ringLegendOpen; renderRing(); };
+  lg.appendChild(toggle);
+  if(ringLegendOpen){ const list=document.createElement('div'); list.className='leg-list';
+    ranked.forEach(t=>{const it=document.createElement('div');it.className='litem';it.innerHTML=`<span class="ldot" style="background:${t.raw}"></span>${esc(t.label)}<span class="lcount">${counts[t.id]}</span>`;list.appendChild(it);});
+    lg.appendChild(list); }
+}
 function renderRiver(){ const today=new Date(); today.setHours(0,0,0,0); const DAYS=30; const start=new Date(today); start.setDate(today.getDate()-(DAYS-1));
   const rows={m:[],n:[],e:[]};
   for(let i=0;i<DAYS;i++){const d=new Date(start);d.setDate(start.getDate()+i);const k=keyOf(d);const day=state.days[k];['m','n','e'].forEach(seg=>{const mv=day&&day.mood?day.mood[seg]:null;rows[seg].push(moodColor(mv));});}
