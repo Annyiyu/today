@@ -891,6 +891,15 @@ function removePool(id){ const idx=state.pool.findIndex(x=>x.id===id); if(idx<0)
 function renderDiary(){ const day=getDay(viewDate); const ta=document.getElementById('diary'); ta.value=day.diary||'';
   ta.oninput=()=>{ day.diary=ta.value; if(diaryTimer)clearTimeout(diaryTimer); diaryTimer=setTimeout(()=>{save();const s=document.getElementById('dsaved');s.classList.add('show');setTimeout(()=>s.classList.remove('show'),1200);},500); };
   ta.onkeydown=(e)=>{
+    if(e.key==='Tab'){
+      e.preventDefault();
+      const pos=ta.selectionStart, end=ta.selectionEnd, val=ta.value;
+      const ins='　　'; // two full-width spaces (中文首行缩进)
+      ta.value=val.slice(0,pos)+ins+val.slice(end);
+      ta.selectionStart=ta.selectionEnd=pos+ins.length;
+      day.diary=ta.value; ta.oninput();
+      return;
+    }
     if(e.key==='Enter'){
       const val=ta.value, pos=ta.selectionStart;
       const lineStart=val.lastIndexOf('\n',pos-1)+1;
