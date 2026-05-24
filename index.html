@@ -119,6 +119,19 @@ body {
 .entry.leaving{ animation:leave 0.24s ease-in forwards; }
 @keyframes leave{ to{opacity:0;transform:translateX(12px);height:0;padding:0 11px;margin:0;border-color:transparent;} }
 .entry.done{ opacity:0.5; }
+.grip{ width:16px; flex-shrink:0; cursor:grab; color:var(--ink-faint); opacity:0; font-size:11px; line-height:1; letter-spacing:-2px; user-select:none; touch-action:none; margin-top:3px; display:flex; align-items:center; justify-content:center; transition:opacity 0.15s; }
+.entry:hover .grip{ opacity:0.45; }
+.grip:hover{ opacity:1 !important; color:var(--accent-deep); }
+.grip:active{ cursor:grabbing; }
+.ggrip{ cursor:grab; color:var(--ink-faint); opacity:0.4; font-size:10px; letter-spacing:-2px; user-select:none; touch-action:none; padding:0 4px 0 0; transition:opacity 0.15s; }
+.ggrip:hover{ opacity:1; color:var(--accent-deep); }
+.ggrip:active{ cursor:grabbing; }
+body.dragging{ cursor:grabbing; user-select:none; }
+.entry.dragging-src{ opacity:0.3; }
+.group-cluster.dragging-src{ opacity:0.4; }
+.drag-ghost{ position:fixed; pointer-events:none; z-index:1000; background:var(--paper); border:1px solid var(--line-strong); border-radius:9px; padding:7px 13px; font-size:14px; color:var(--ink); box-shadow:0 4px 18px rgba(120,110,140,0.22); max-width:240px; overflow:hidden; text-overflow:ellipsis; white-space:nowrap; }
+.drop-line{ height:0; border-top:2px solid var(--accent); margin:-1px 0; border-radius:2px; animation:fadeIn 0.2s; }
+.drop-zone-hot{ background:rgba(242,157,177,0.05); border-radius:12px; }
 .echeck{ width:19px; height:19px; border-radius:50%; border:1.5px solid var(--ink-faint); cursor:pointer;
   flex-shrink:0; margin-top:2px; display:flex; align-items:center; justify-content:center; background:transparent; transition:all 0.2s; }
 .echeck:hover{ border-color:var(--accent); }
@@ -469,6 +482,130 @@ function setupMoodTrack(track,seg){
   // double-click to clear
   track.addEventListener('dblclick',()=>{ day().mood[seg]=null; track.classList.add('unset'); save(); if(currentView==='river')renderRiver(); });
 }
+// ============ Drag & Drop ============
+const drag={ active:false, pending:null, kind:null, id:null, ghost:null, threshold:5, dropInfo:null };
+function attachDrag(handle,kind,id){
+  const start=(e)=>{ if(e.button!==undefined&&e.button!==0)return;
+    const pt=e.touches?e.touches[0]:e; drag.pending={kind,id,x:pt.clientX,y:pt.clientY}; e.preventDefault();
+    document.addEventListener('mousemove',onMove,{passive:false}); document.addEventListener('mouseup',onUp);
+    document.addEventListener('touchmove',onMove,{passive:false}); document.addEventListener('touchend',onUp); document.addEventListener('touchcancel',onUp); };
+  handle.addEventListener('mousedown',start); handle.addEventListener('touchstart',start,{passive:false});
+}
+function onMove(e){
+  const pt=e.touches?e.touches[0]:e;
+  if(drag.pending&&!drag.active){
+    const dx=pt.clientX-drag.pending.x, dy=pt.clientY-drag.pending.y;
+    if(Math.sqrt(dx*dx+dy*dy)<drag.threshold) return;
+    drag.active=true; drag.kind=drag.pending.kind; drag.id=drag.pending.id; drag.pending=null;
+    document.body.classList.add('dragging');
+    let label='';
+    if(drag.kind==='entry'){ const en=findEntryAnyDay(drag.id); label=en?en.text:''; }
+    else if(drag.kind==='pool'){ const p=state.pool.find(x=>x.id===drag.id); label=p?p.text:''; }
+    else if(drag.kind==='group'){ label=drag.id; }
+    drag.ghost=document.createElement('div'); drag.ghost.className='drag-ghost zh'; drag.ghost.textContent=label;
+    document.body.appendChild(drag.ghost);
+    const srcRow=rowOf(drag.kind,drag.id); if(srcRow)srcRow.classList.add('dragging-src');
+  }
+  if(!drag.active) return; e.preventDefault();
+  if(drag.ghost){ drag.ghost.style.left=(pt.clientX+12)+'px'; drag.ghost.style.top=(pt.clientY+12)+'px'; }
+  updateDropIndicator(pt.clientX,pt.clientY);
+}
+function onUp(){
+  document.removeEventListener('mousemove',onMove); document.removeEventListener('mouseup',onUp);
+  document.removeEventListener('touchmove',onMove); document.removeEventListener('touchend',onUp); document.removeEventListener('touchcancel',onUp);
+  if(!drag.active){ drag.pending=null; return; }
+  if(drag.dropInfo) commitDrop();
+  clearDropMarks();
+  if(drag.ghost){drag.ghost.remove();drag.ghost=null;}
+  document.body.classList.remove('dragging');
+  const s=document.querySelector('.dragging-src'); if(s)s.classList.remove('dragging-src');
+  drag.active=false; drag.kind=null; drag.id=null; drag.dropInfo=null; drag.pending=null;
+  renderEntries(); renderPool(); renderViews();
+}
+function rowOf(kind,id){
+  if(kind==='group') return document.querySelector(`.group-cluster[data-group="${cssEsc(id)}"]`);
+  if(kind==='pool') return document.querySelector(`#pool .entry[data-id="${id}"]`);
+  return document.querySelector(`#entries .entry[data-id="${id}"]`);
+}
+function cssEsc(s){ return String(s).replace(/["\\]/g,'\\$&'); }
+function findEntryAnyDay(id){ const day=getDay(viewDate); return day.entries.find(e=>e.id===id); }
+function clearDropMarks(){ document.querySelectorAll('.drop-line').forEach(el=>el.remove());
+  document.querySelectorAll('.drop-zone-hot').forEach(el=>el.classList.remove('drop-zone-hot')); }
+function updateDropIndicator(x,y){
+  clearDropMarks(); drag.dropInfo=null;
+  const entriesBox=document.getElementById('entries'); const poolBox=document.getElementById('pool');
+  const eRect=entriesBox.getBoundingClientRect(); const pRect=poolBox.getBoundingClientRect();
+  const inEntries = y>=eRect.top-30 && y<=eRect.bottom+30 && x>=eRect.left-20 && x<=eRect.right+20;
+  const inPool = y>=pRect.top-30 && y<=pRect.bottom+30 && x>=pRect.left-20 && x<=pRect.right+20;
+  if(drag.kind==='group'){
+    if(!inEntries) return;
+    const clusters=Array.from(entriesBox.querySelectorAll('.group-cluster')).filter(c=>c.dataset.group!==drag.id);
+    let idx=clusters.length;
+    for(let i=0;i<clusters.length;i++){ const r=clusters[i].getBoundingClientRect(); if(y<r.top+r.height/2){idx=i;break;} }
+    const line=document.createElement('div'); line.className='drop-line';
+    if(idx===clusters.length){ if(clusters.length)clusters[clusters.length-1].after(line); else entriesBox.appendChild(line); }
+    else clusters[idx].before(line);
+    drag.dropInfo={type:'group-reorder',beforeGroup: idx<clusters.length?clusters[idx].dataset.group:null};
+    return;
+  }
+  let targetSection=null, box=null;
+  if(inEntries){ targetSection='entries'; box=entriesBox; }
+  else if(inPool){ targetSection='pool'; box=poolBox; }
+  else return;
+  if(targetSection==='pool'){
+    box.classList.add('drop-zone-hot');
+    const rows=Array.from(box.querySelectorAll('.entry')).filter(r=>!(drag.kind==='pool'&&r.dataset.id===drag.id));
+    let idx=rows.length;
+    for(let i=0;i<rows.length;i++){ const r=rows[i].getBoundingClientRect(); if(y<r.top+r.height/2){idx=i;break;} }
+    const line=document.createElement('div'); line.className='drop-line';
+    if(idx===rows.length){ if(rows.length)rows[rows.length-1].after(line); else box.appendChild(line); }
+    else rows[idx].before(line);
+    drag.dropInfo={type:'to-pool',index:idx};
+    return;
+  }
+  box.classList.add('drop-zone-hot');
+  let overGroup=null;
+  box.querySelectorAll('.group-cluster').forEach(c=>{ const r=c.getBoundingClientRect(); if(y>=r.top&&y<=r.bottom) overGroup=c.dataset.group; });
+  let candidateRows;
+  if(overGroup){ const cluster=box.querySelector(`.group-cluster[data-group="${cssEsc(overGroup)}"]`);
+    candidateRows=Array.from(cluster.querySelectorAll('.entry')).filter(r=>!(drag.kind==='entry'&&r.dataset.id===drag.id)); }
+  else { candidateRows=Array.from(box.children).filter(c=>c.classList.contains('entry')&&!(drag.kind==='entry'&&c.dataset.id===drag.id)); }
+  let idx=candidateRows.length;
+  for(let i=0;i<candidateRows.length;i++){ const r=candidateRows[i].getBoundingClientRect(); if(y<r.top+r.height/2){idx=i;break;} }
+  const line=document.createElement('div'); line.className='drop-line';
+  if(candidateRows.length){ if(idx===candidateRows.length)candidateRows[candidateRows.length-1].after(line); else candidateRows[idx].before(line); }
+  else if(overGroup){ const cluster=box.querySelector(`.group-cluster[data-group="${cssEsc(overGroup)}"]`); (cluster.querySelector('.group-body')||cluster).appendChild(line); }
+  else box.insertBefore(line, box.querySelector('.group-cluster')||null);
+  drag.dropInfo={type:'to-today', group:overGroup||null, beforeId: idx<candidateRows.length?candidateRows[idx].dataset.id:null};
+}
+function commitDrop(){
+  const di=drag.dropInfo; const day=getDay(viewDate);
+  if(di.type==='group-reorder'){
+    const arr=day.entries; const moving=arr.filter(e=>e.group===drag.id); const rest=arr.filter(e=>e.group!==drag.id);
+    let insertAt=rest.length;
+    if(di.beforeGroup){ insertAt=rest.findIndex(e=>e.group===di.beforeGroup); if(insertAt<0)insertAt=rest.length; }
+    day.entries=[...rest.slice(0,insertAt),...moving,...rest.slice(insertAt)]; save(); return;
+  }
+  if(di.type==='to-pool'){
+    if(drag.kind==='entry'){ const idx=day.entries.findIndex(e=>e.id===drag.id); if(idx<0)return; const [m]=day.entries.splice(idx,1);
+      const np={id:'p'+Date.now(),text:m.text,tags:m.tags||[],group:null}; state.pool.splice(di.index,0,np); save(); toast('挪到「以后」啦'); }
+    else if(drag.kind==='pool'){ const from=state.pool.findIndex(p=>p.id===drag.id); if(from<0)return; const [m]=state.pool.splice(from,1);
+      let to=di.index; if(from<to)to--; state.pool.splice(to,0,m); save(); }
+    return;
+  }
+  if(di.type==='to-today'){
+    if(drag.kind==='pool'){ const from=state.pool.findIndex(p=>p.id===drag.id); if(from<0)return; const [m]=state.pool.splice(from,1);
+      const ne={id:'e'+Date.now(),text:m.text,tags:m.tags||[],group:di.group,done:false};
+      insertEntryAt(day,ne,di.beforeId); save(); toast(isToday()?'挪到今天啦':'挪过去啦'); }
+    else if(drag.kind==='entry'){ const idx=day.entries.findIndex(e=>e.id===drag.id); if(idx<0)return; const [m]=day.entries.splice(idx,1);
+      m.group=di.group; insertEntryAt(day,m,di.beforeId); save(); }
+    return;
+  }
+}
+function insertEntryAt(day,entry,beforeId){
+  if(beforeId){ const i=day.entries.findIndex(e=>e.id===beforeId); if(i>=0){ day.entries.splice(i,0,entry); return; } }
+  day.entries.push(entry);
+}
 function renderEntries(animId){ const box=document.getElementById('entries'); const day=getDay(viewDate); box.innerHTML='';
   const open=day.entries.filter(e=>!e.done);
   const done=day.entries.filter(e=>e.done);
@@ -494,8 +631,11 @@ function renderClustered(container, list, animId){
     const cluster=document.createElement('div'); cluster.className='group-cluster'; cluster.dataset.group=gname;
     const head=document.createElement('div'); head.className='group-head';
     const folded=groupFold[gname];
-    head.innerHTML=`<span class="gcaret">${folded?'▸':'▾'}</span><span class="gname zh">${esc(gname)}</span><span class="gcount">${groups[gname].length}</span>`;
-    head.onclick=(e)=>{ if(e.target.closest('.gedit'))return; groupFold[gname]=!groupFold[gname]; renderEntries(); };
+    const ggrip=document.createElement('span'); ggrip.className='ggrip'; ggrip.innerHTML='⋮⋮'; ggrip.title='拖动整组'; attachDrag(ggrip,'group',gname); head.appendChild(ggrip);
+    const caret=document.createElement('span'); caret.className='gcaret'; caret.textContent=folded?'▸':'▾'; head.appendChild(caret);
+    const nm=document.createElement('span'); nm.className='gname zh'; nm.textContent=gname; head.appendChild(nm);
+    const cnt=document.createElement('span'); cnt.className='gcount'; cnt.textContent=groups[gname].length; head.appendChild(cnt);
+    head.onclick=(e)=>{ if(e.target.closest('.gedit')||e.target.closest('.ggrip'))return; groupFold[gname]=!groupFold[gname]; renderEntries(); };
     const edit=document.createElement('span'); edit.className='gedit'; edit.innerHTML='⋯'; edit.title='重命名 / 删除组';
     edit.onclick=(e)=>{ e.stopPropagation(); manageGroup(gname); };
     head.appendChild(edit);
@@ -505,7 +645,8 @@ function renderClustered(container, list, animId){
     container.appendChild(cluster);
   });
 }
-function buildEntry(en,anim){ const row=document.createElement('div'); row.className='entry'+(anim?' adding':'')+(en.done?' done':''); row.dataset.id=en.id;
+function buildEntry(en,anim){ const row=document.createElement('div'); row.className='entry'+(anim?' adding':'')+(en.done?' done':''); row.dataset.id=en.id; row.dataset.kind='entry';
+  const grip=document.createElement('div'); grip.className='grip'; grip.innerHTML='⋮⋮'; grip.title='拖动'; attachDrag(grip,'entry',en.id); row.appendChild(grip);
   const chk=document.createElement('div'); chk.className='echeck'+(en.done?' on':''); chk.title=en.done?'已完成':'点一下打勾'; chk.onclick=()=>toggleDone(en.id); row.appendChild(chk);
   const main=document.createElement('div'); main.className='emain';
   const txt=document.createElement('div'); txt.className='etext zh'; txt.textContent=en.text; txt.title='点击编辑'; txt.onclick=()=>editEntry(en.id); main.appendChild(txt);
@@ -636,7 +777,8 @@ function manageAllTags(after){ const h=document.getElementById('dlghost'); h.inn
 function renderPool(animId){ const box=document.getElementById('pool'); box.innerHTML='';
   if(state.pool.length===0&&!addingPool){ /* 空着就纯留白 */ }
   state.pool.forEach(p=>box.appendChild(buildPool(p,p.id===animId))); renderPoolAdd(); }
-function buildPool(p,anim){ const row=document.createElement('div'); row.className='entry'+(anim?' adding':''); row.dataset.id=p.id; row.style.background='transparent'; row.style.borderStyle='dashed';
+function buildPool(p,anim){ const row=document.createElement('div'); row.className='entry'+(anim?' adding':''); row.dataset.id=p.id; row.dataset.kind='pool'; row.style.background='transparent'; row.style.borderStyle='dashed';
+  const grip=document.createElement('div'); grip.className='grip'; grip.innerHTML='⋮⋮'; grip.title='拖动'; attachDrag(grip,'pool',p.id); row.appendChild(grip);
   const pk=document.createElement('div'); pk.className='pcheck'; pk.title='这天做了 → 挪到上面'; pk.onclick=()=>pickPool(p.id); row.appendChild(pk);
   const main=document.createElement('div'); main.className='emain';
   const txt=document.createElement('div'); txt.className='etext zh'; txt.style.color='var(--ink-soft)'; txt.textContent=p.text; txt.title='点击编辑'; txt.onclick=()=>editPool(p.id); main.appendChild(txt);
