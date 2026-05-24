@@ -134,6 +134,20 @@ body {
 .pool-head:hover{ background:rgba(242,157,177,0.06); }
 .pool-caret{ font-family:var(--display); font-size:11px; color:var(--ink-faint); transition:transform 0.2s; display:inline-block; margin-right:2px; }
 .pool-head:hover .pool-caret{ color:var(--accent-deep); }
+.sec-tool{ font-family:var(--zh); font-size:11px; color:var(--ink-faint); cursor:pointer; padding:2px 9px; border-radius:999px; border:1px solid var(--line-strong); flex-shrink:0; transition:all 0.15s; margin-left:4px; }
+.sec-tool:hover{ color:var(--accent-deep); border-color:var(--accent); }
+.sel-box{ width:18px; height:18px; border-radius:5px; border:1.5px solid var(--ink-faint); flex-shrink:0; margin-top:2px; cursor:pointer; display:flex; align-items:center; justify-content:center; transition:all 0.18s; }
+.sel-box:hover{ border-color:var(--accent); }
+.sel-box.on{ background:var(--accent); border-color:var(--accent); }
+.sel-box.on::after{ content:''; width:5px; height:8px; border:solid #fff; border-width:0 1.5px 1.5px 0; transform:rotate(45deg) translateY(-1px); }
+.sel-box.disabled{ opacity:0.25; cursor:default; border-style:dashed; }
+.sel-box.disabled:hover{ border-color:var(--ink-faint); }
+.batch-bar{ position:fixed; bottom:24px; left:50%; transform:translateX(-50%); background:var(--ink); color:var(--bg); border-radius:999px; padding:8px 8px 8px 18px; display:flex; align-items:center; gap:8px; box-shadow:0 8px 30px rgba(0,0,0,0.2); z-index:280; animation:tin 0.3s cubic-bezier(0.16,1,0.3,1); max-width:calc(100vw - 24px); }
+.bb-count{ font-size:12.5px; opacity:0.9; white-space:nowrap; }
+.bb-btn,.bb-cancel{ font-family:var(--zh); font-size:12px; color:var(--bg); background:rgba(251,248,243,0.16); border:none; cursor:pointer; padding:7px 13px; border-radius:999px; transition:background 0.15s; }
+.bb-btn:hover,.bb-cancel:hover{ background:rgba(251,248,243,0.28); }
+.bb-move{ font-family:var(--zh); font-size:12.5px; color:var(--ink); background:var(--bg); border:none; cursor:pointer; padding:7px 15px; border-radius:999px; font-weight:500; transition:opacity 0.15s; white-space:nowrap; }
+.bb-move:hover{ opacity:0.85; }
 
 .entries{ display:flex; flex-direction:column; gap:6px; }
 .entry{ display:flex; align-items:flex-start; gap:9px; padding:9px 11px; background:rgba(255,255,255,0.78);
@@ -370,12 +384,12 @@ body.dragging{ cursor:grabbing; user-select:none; }
         <div class="mhint zh"><span>暖</span><span>双击可清除</span><span>冷</span></div>
       </div>
       <div class="sec">
-        <div class="sec-head"><span class="sec-title zh" id="today-title">今天</span><span class="sec-note zh">白云苍狗 · 生活悠悠</span><span class="sec-line"></span></div>
+        <div class="sec-head"><span class="sec-title zh" id="today-title">今天</span><span class="sec-note zh">白云苍狗 · 生活悠悠</span><span class="sec-line"></span><span class="sec-tool zh" id="today-tool">整理</span></div>
         <div class="entries" id="entries"></div>
         <div class="addzone" id="addzone"></div>
       </div>
       <div class="sec">
-        <div class="sec-head pool-head" id="pool-head"><span class="pool-caret" id="pool-caret">▾</span><span class="sec-title zh">以后</span><span class="sec-note zh" id="pool-note">心之所向 · 来日方长</span><span class="sec-line"></span></div>
+        <div class="sec-head pool-head" id="pool-head"><span class="pool-caret" id="pool-caret">▾</span><span class="sec-title zh">以后</span><span class="sec-note zh" id="pool-note">心之所向 · 来日方长</span><span class="sec-line"></span><span class="sec-tool zh" id="pool-tool">整理</span></div>
         <div class="entries" id="pool"></div>
         <div class="addzone" id="pooladd"></div>
       </div>
@@ -438,6 +452,8 @@ const sb=supabase.createClient(SUPABASE_URL,SUPABASE_KEY);
 let state=null; let session=null; let viewDate=todayKey();
 let addingEntry=false, entryTagSel=[], addingPool=false, currentView='weave', diaryTimer=null;
 let groupFold={}; // groupName -> bool (collapsed)
+let selectMode=null; // null | 'today' | 'pool'
+let selectedIds=new Set();
 function fresh(){ return { tags:JSON.parse(JSON.stringify(DEFAULT_TAGS)), days:{}, pool:[], poolFold:false }; }
 function migrate(s){
   if(!Array.isArray(s.tags)||!s.tags.length) s.tags=JSON.parse(JSON.stringify(DEFAULT_TAGS));
@@ -734,16 +750,26 @@ function renderClustered(container, list, animId){
   });
 }
 function buildEntry(en,anim){ const row=document.createElement('div'); row.className='entry'+(anim?' adding':'')+(en.done?' done':''); row.dataset.id=en.id; row.dataset.kind='entry';
+  if(selectMode==='today'){
+    if(en.done){ const sp=document.createElement('div'); sp.className='sel-box disabled'; sp.title='已完成的不参与移动'; row.appendChild(sp); }
+    else { const sb=document.createElement('div'); sb.className='sel-box'+(selectedIds.has(en.id)?' on':''); sb.onclick=()=>toggleSelect(en.id); row.appendChild(sb); }
+    const main2=document.createElement('div'); main2.className='emain';
+    const txt2=document.createElement('div'); txt2.className='etext zh'+(en.done?' done-txt':''); txt2.textContent=en.text;
+    txt2.onclick=()=>{ if(!en.done)toggleSelect(en.id); }; main2.appendChild(txt2);
+    if(en.tags&&en.tags.length)main2.appendChild(buildTagChips(en));
+    row.appendChild(main2); return row;
+  }
   const grip=document.createElement('div'); grip.className='grip'; grip.innerHTML='⋮⋮'; grip.title='拖动'; attachDrag(grip,'entry',en.id); row.appendChild(grip);
   const chk=document.createElement('div'); chk.className='echeck'+(en.done?' on':''); chk.title=en.done?'已完成':'点一下打勾'; chk.onclick=()=>toggleDone(en.id); row.appendChild(chk);
   const main=document.createElement('div'); main.className='emain';
   const txt=document.createElement('div'); txt.className='etext zh'; txt.textContent=en.text; txt.title='点击编辑'; txt.onclick=()=>editEntry(en.id); main.appendChild(txt);
   if(en.tags&&en.tags.length){main.appendChild(buildTagChips(en));}
   row.appendChild(main); const acts=document.createElement('div'); acts.className='eact';
+  const mv=document.createElement('button'); mv.className='mbtn'; mv.innerHTML='↓'; mv.title='移到「以后」'; mv.onclick=()=>moveEntryToPool(en.id);
   const gp=document.createElement('button'); gp.className='mbtn'; gp.innerHTML='❏'; gp.title='归到一组'; gp.onclick=()=>assignGroup(en.id);
   const tg=document.createElement('button'); tg.className='mbtn'; tg.innerHTML='⊕'; tg.title='标签'; tg.onclick=()=>retag(en.id,row);
   const dl=document.createElement('button'); dl.className='mbtn'; dl.innerHTML='×'; dl.title='删除'; dl.onclick=()=>removeEntry(en.id);
-  acts.appendChild(gp);acts.appendChild(tg);acts.appendChild(dl);row.appendChild(acts); return row; }
+  acts.appendChild(mv);acts.appendChild(gp);acts.appendChild(tg);acts.appendChild(dl);row.appendChild(acts); return row; }
 function toggleDone(id){ const day=getDay(viewDate); const en=day.entries.find(e=>e.id===id); if(!en)return; en.done=!en.done; save(); renderEntries(); }
 // existing groups across this day (for quick-pick)
 function existingGroups(){ const day=getDay(viewDate); const set=[]; day.entries.forEach(e=>{ if(e.group&&!set.includes(e.group))set.push(e.group); }); return set; }
@@ -786,6 +812,7 @@ function editEntry(id){ const day=getDay(viewDate); const en=day.entries.find(e=
   const c=()=>{const v=inp.value.trim();if(v){en.text=v;save();}renderEntries();renderViews();};
   inp.onkeydown=e=>{if(e.key==='Enter')c();else if(e.key==='Escape')renderEntries();}; inp.onblur=c; setTimeout(()=>{inp.focus();inp.select();},0); }
 function renderAddZone(){ const z=document.getElementById('addzone'); z.innerHTML='';
+  if(selectMode==='today'){ return; }
   if(!addingEntry){const b=document.createElement('button');b.className='add-trig zh';b.textContent='+  记一件事';b.onclick=()=>{addingEntry=true;entryTagSel=[];renderAddZone();};z.appendChild(b);return;}
   const wrap=document.createElement('div'); const row=document.createElement('div'); row.className='add-row';
   const inp=document.createElement('input'); inp.className='add-in zh'; inp.placeholder='今天我…';
@@ -883,16 +910,25 @@ function renderPool(animId){ const box=document.getElementById('pool'); box.inne
   state.pool.forEach(p=>box.appendChild(buildPool(p,p.id===animId))); renderPoolAdd(); }
 function togglePoolFold(){ state.poolFold=!state.poolFold; save(); renderPool(); }
 function buildPool(p,anim){ const row=document.createElement('div'); row.className='entry'+(anim?' adding':''); row.dataset.id=p.id; row.dataset.kind='pool'; row.style.background='transparent'; row.style.borderStyle='dashed';
+  if(selectMode==='pool'){
+    const sb=document.createElement('div'); sb.className='sel-box'+(selectedIds.has(p.id)?' on':''); sb.onclick=()=>toggleSelect(p.id); row.appendChild(sb);
+    const main2=document.createElement('div'); main2.className='emain';
+    const txt2=document.createElement('div'); txt2.className='etext zh'; txt2.style.color='var(--ink-soft)'; txt2.textContent=p.text; txt2.onclick=()=>toggleSelect(p.id); main2.appendChild(txt2);
+    if(p.tags&&p.tags.length)main2.appendChild(buildTagChips(p));
+    row.appendChild(main2); return row;
+  }
   const grip=document.createElement('div'); grip.className='grip'; grip.innerHTML='⋮⋮'; grip.title='拖动'; attachDrag(grip,'pool',p.id); row.appendChild(grip);
   const pk=document.createElement('div'); pk.className='pcheck'; pk.title='这天做了 → 挪到上面'; pk.onclick=()=>pickPool(p.id); row.appendChild(pk);
   const main=document.createElement('div'); main.className='emain';
   const txt=document.createElement('div'); txt.className='etext zh'; txt.style.color='var(--ink-soft)'; txt.textContent=p.text; txt.title='点击编辑'; txt.onclick=()=>editPool(p.id); main.appendChild(txt);
   if(p.tags&&p.tags.length){main.appendChild(buildTagChips(p));}
   row.appendChild(main); const acts=document.createElement('div'); acts.className='eact';
+  const mv=document.createElement('button'); mv.className='mbtn'; mv.innerHTML='↑'; mv.title='移到「今天」'; mv.onclick=()=>movePoolToToday(p.id);
   const tg=document.createElement('button'); tg.className='mbtn'; tg.innerHTML='⊕'; tg.onclick=()=>retagPool(p.id,row);
   const dl=document.createElement('button'); dl.className='mbtn'; dl.innerHTML='×'; dl.onclick=()=>removePool(p.id);
-  acts.appendChild(tg);acts.appendChild(dl);row.appendChild(acts); return row; }
+  acts.appendChild(mv);acts.appendChild(tg);acts.appendChild(dl);row.appendChild(acts); return row; }
 function renderPoolAdd(){ const z=document.getElementById('pooladd'); z.innerHTML='';
+  if(selectMode==='pool'){ return; }
   if(!addingPool){const b=document.createElement('button');b.className='add-trig zh';b.textContent='+  接住一个念头';b.onclick=()=>{addingPool=true;renderPoolAdd();};z.appendChild(b);return;}
   const row=document.createElement('div'); row.className='add-row';
   const inp=document.createElement('input'); inp.className='add-in zh'; inp.placeholder='想做的小事 / 大事…';
@@ -915,6 +951,75 @@ function removePool(id){ const idx=state.pool.findIndex(x=>x.id===id); if(idx<0)
   const row=document.querySelector(`#pool .entry[data-id="${id}"]`); state.pool.splice(idx,1); save();
   if(row){row.classList.add('leaving');setTimeout(renderPool,230);}else renderPool();
   toast('念头删了','撤销',()=>{state.pool.splice(Math.min(idx,state.pool.length),0,p);save();renderPool();}); }
+// ===== move between 今天 <-> 以后 =====
+function moveEntryToPool(id){ const day=getDay(viewDate); const idx=day.entries.findIndex(e=>e.id===id); if(idx<0)return;
+  const e=day.entries[idx]; day.entries.splice(idx,1);
+  state.pool.push({id:'p'+Date.now(),text:e.text,tags:[...(e.tags||[])],group:null}); // 清除done/group
+  if(state.poolFold){ state.poolFold=false; } // 展开以后让用户看到
+  save(); renderEntries(); renderPool(); renderViews(); toast('移到「以后」啦'); }
+function movePoolToToday(id){ const idx=state.pool.findIndex(p=>p.id===id); if(idx<0)return;
+  const p=state.pool[idx]; state.pool.splice(idx,1);
+  getDay(viewDate).entries.push({id:'e'+Date.now(),text:p.text,tags:[...(p.tags||[])],group:null,done:false}); // 不自动勾
+  save(); renderEntries(); renderPool(); renderViews(); toast(isToday()?'移到今天啦':'移过去啦'); }
+function moveAllToPool(){ const day=getDay(viewDate); const open=day.entries.filter(e=>!e.done); if(open.length===0){toast('没有可移动的事');return;}
+  const snap=JSON.parse(JSON.stringify({entries:day.entries,pool:state.pool}));
+  open.forEach(e=>{ state.pool.push({id:'p'+Date.now()+Math.random().toString(36).slice(2,5),text:e.text,tags:[...(e.tags||[])],group:null}); });
+  day.entries=day.entries.filter(e=>e.done); // 只留下已完成的
+  if(state.poolFold) state.poolFold=false;
+  save(); renderEntries(); renderPool(); renderViews();
+  toast(`${open.length} 件移到「以后」`,'撤销',()=>{ day.entries=snap.entries; state.pool=snap.pool; save(); renderEntries(); renderPool(); renderViews(); }); }
+function moveAllToToday(){ if(state.pool.length===0){toast('「以后」是空的');return;}
+  const snap=JSON.parse(JSON.stringify({entries:getDay(viewDate).entries,pool:state.pool}));
+  const day=getDay(viewDate); const n=state.pool.length;
+  state.pool.forEach(p=>{ day.entries.push({id:'e'+Date.now()+Math.random().toString(36).slice(2,5),text:p.text,tags:[...(p.tags||[])],group:null,done:false}); });
+  state.pool=[];
+  save(); renderEntries(); renderPool(); renderViews();
+  toast(`${n} 件移到今天`,'撤销',()=>{ day.entries=snap.entries; state.pool=snap.pool; save(); renderEntries(); renderPool(); renderViews(); }); }
+// move a specific set of ids
+function moveEntriesToPool(ids){ const day=getDay(viewDate); const moving=day.entries.filter(e=>ids.includes(e.id)&&!e.done); if(moving.length===0)return;
+  const snap=JSON.parse(JSON.stringify({entries:day.entries,pool:state.pool}));
+  moving.forEach(e=>{ state.pool.push({id:'p'+Date.now()+Math.random().toString(36).slice(2,5),text:e.text,tags:[...(e.tags||[])],group:null}); });
+  day.entries=day.entries.filter(e=>!(ids.includes(e.id)&&!e.done));
+  if(state.poolFold) state.poolFold=false;
+  save(); renderEntries(); renderPool(); renderViews();
+  toast(`${moving.length} 件移到「以后」`,'撤销',()=>{ day.entries=snap.entries; state.pool=snap.pool; save(); renderEntries(); renderPool(); renderViews(); }); }
+function movePoolItemsToToday(ids){ const moving=state.pool.filter(p=>ids.includes(p.id)); if(moving.length===0)return;
+  const snap=JSON.parse(JSON.stringify({entries:getDay(viewDate).entries,pool:state.pool}));
+  const day=getDay(viewDate);
+  moving.forEach(p=>{ day.entries.push({id:'e'+Date.now()+Math.random().toString(36).slice(2,5),text:p.text,tags:[...(p.tags||[])],group:null,done:false}); });
+  state.pool=state.pool.filter(p=>!ids.includes(p.id));
+  save(); renderEntries(); renderPool(); renderViews();
+  toast(`${moving.length} 件移到今天`,'撤销',()=>{ day.entries=snap.entries; state.pool=snap.pool; save(); renderEntries(); renderPool(); renderViews(); }); }
+// ===== multi-select mode =====
+function enterSelectMode(which){ selectMode=which; selectedIds=new Set(); renderEntries(); renderPool(); renderBatchBar(); }
+function exitSelectMode(){ selectMode=null; selectedIds=new Set(); renderEntries(); renderPool(); renderBatchBar(); }
+function toggleSelect(id){ if(selectedIds.has(id))selectedIds.delete(id); else selectedIds.add(id); renderBatchBar();
+  const el=document.querySelector(`[data-id="${id}"] .sel-box`); if(el)el.classList.toggle('on',selectedIds.has(id)); }
+function renderBatchBar(){
+  let bar=document.getElementById('batch-bar');
+  if(!selectMode){ if(bar)bar.remove(); return; }
+  if(!bar){ bar=document.createElement('div'); bar.id='batch-bar'; bar.className='batch-bar'; document.body.appendChild(bar); }
+  const n=selectedIds.size;
+  const dirWord = selectMode==='today' ? '移到「以后」' : '移到「今天」';
+  const moveLabel = n===0 ? `全部${dirWord}` : `${dirWord} · ${n}`;
+  bar.innerHTML=`
+    <span class="bb-count zh">${n===0?'未选 · 点条目选择':'已选 '+n}</span>
+    <button class="bb-btn zh" id="bb-all">全选</button>
+    <button class="bb-move zh" id="bb-move">${moveLabel}</button>
+    <button class="bb-cancel zh" id="bb-cancel">完成</button>`;
+  bar.querySelector('#bb-cancel').onclick=exitSelectMode;
+  bar.querySelector('#bb-all').onclick=()=>{
+    if(selectMode==='today'){ const open=getDay(viewDate).entries.filter(e=>!e.done); const allSel=open.length>0&&open.every(e=>selectedIds.has(e.id));
+      if(allSel) selectedIds=new Set(); else open.forEach(e=>selectedIds.add(e.id)); }
+    else { const allSel=state.pool.length>0&&state.pool.every(p=>selectedIds.has(p.id)); if(allSel) selectedIds=new Set(); else state.pool.forEach(p=>selectedIds.add(p.id)); }
+    renderEntries(); renderPool(); renderBatchBar(); };
+  bar.querySelector('#bb-move').onclick=()=>{
+    if(n===0){ // move all
+      if(selectMode==='today') moveAllToPool(); else moveAllToToday(); exitSelectMode(); return; }
+    const ids=[...selectedIds];
+    if(selectMode==='today') moveEntriesToPool(ids); else movePoolItemsToToday(ids);
+    exitSelectMode(); };
+}
 function renderDiary(){ const day=getDay(viewDate); const ta=document.getElementById('diary'); ta.value=day.diary||'';
   ta.oninput=()=>{ day.diary=ta.value; if(diaryTimer)clearTimeout(diaryTimer); diaryTimer=setTimeout(()=>{save();const s=document.getElementById('dsaved');s.classList.add('show');setTimeout(()=>s.classList.remove('show'),1200);},500); };
   ta.onkeydown=(e)=>{
@@ -1012,7 +1117,9 @@ document.querySelectorAll('.vtab').forEach(tab=>{ tab.onclick=()=>{ currentView=
 document.getElementById('prev').onclick=()=>{const d=parseKey(viewDate);d.setDate(d.getDate()-1);viewDate=keyOf(d);switchDay();};
 document.getElementById('next').onclick=()=>{const d=parseKey(viewDate);d.setDate(d.getDate()+1);viewDate=keyOf(d);switchDay();};
 document.getElementById('djump').onclick=()=>{viewDate=todayKey();switchDay();};
-document.getElementById('pool-head').onclick=(e)=>{ if(e.target.closest('.sec-line'))return; togglePoolFold(); };
+document.getElementById('pool-head').onclick=(e)=>{ if(e.target.closest('.sec-line')||e.target.closest('.sec-tool'))return; togglePoolFold(); };
+document.getElementById('today-tool').onclick=(e)=>{ e.stopPropagation(); enterSelectMode('today'); };
+document.getElementById('pool-tool').onclick=(e)=>{ e.stopPropagation(); if(state.poolFold){state.poolFold=false;save();} enterSelectMode('pool'); };
 let calMonth=null; // {y,m} currently shown month in calendar
 document.getElementById('dlabel').onclick=()=>openCalendar();
 function openCalendar(){
