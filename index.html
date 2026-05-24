@@ -78,7 +78,28 @@ body {
 .darr{ font-family:var(--display); font-weight:600; font-size:19px; color:var(--ink-faint); cursor:pointer;
   padding:3px 9px; user-select:none; transition:all 0.2s; border-radius:9px; line-height:1; }
 .darr:hover{ color:var(--accent-deep); background:#fdeef2; }
-.dlabel{ flex:1; text-align:center; font-family:var(--display); font-weight:600; font-size:16px; }
+.dlabel{ flex:1; text-align:center; font-family:var(--display); font-weight:600; font-size:16px; cursor:pointer; border-radius:8px; padding:3px 6px; transition:background 0.18s; }
+.dlabel:hover{ background:#fdeef2; }
+
+/* calendar popup */
+.cal-pop{ position:fixed; z-index:260; width:280px; background:var(--paper); border:1px solid var(--line-strong); border-radius:14px; padding:14px; box-shadow:0 10px 36px rgba(120,110,140,0.2); animation:din 0.18s cubic-bezier(0.16,1,0.3,1); }
+.cal-head{ display:flex; align-items:center; justify-content:space-between; margin-bottom:10px; }
+.cal-title{ font-family:var(--zh); font-size:14px; color:var(--ink); font-weight:500; }
+.cal-nav{ font-family:var(--display); font-weight:600; font-size:18px; color:var(--ink-faint); cursor:pointer; padding:2px 10px; border-radius:8px; transition:all 0.15s; }
+.cal-nav:hover{ color:var(--accent-deep); background:#fdeef2; }
+.cal-grid{ display:grid; grid-template-columns:repeat(7,1fr); gap:2px; }
+.cal-wd{ font-family:var(--zh); font-size:10px; color:var(--ink-faint); text-align:center; padding:4px 0; }
+.cal-cell{ position:relative; aspect-ratio:1; display:flex; align-items:center; justify-content:center; font-family:var(--display); font-size:12.5px; color:var(--ink); cursor:pointer; border-radius:8px; transition:background 0.12s; }
+.cal-cell.empty{ cursor:default; }
+.cal-cell:not(.empty):hover{ background:#fdeef2; }
+.cal-cell.today{ font-weight:700; color:var(--accent-deep); }
+.cal-cell.view{ background:var(--accent); color:#fff; }
+.cal-cell.view:hover{ background:var(--accent-deep); }
+.cal-dot{ position:absolute; bottom:3px; left:50%; transform:translateX(-50%); width:4px; height:4px; border-radius:50%; background:var(--accent); }
+.cal-cell.view .cal-dot{ background:#fff; }
+.cal-foot{ margin-top:10px; text-align:center; }
+.cal-today-btn{ font-family:var(--zh); font-size:11.5px; color:var(--accent-deep); cursor:pointer; padding:4px 12px; border-radius:999px; transition:background 0.15s; }
+.cal-today-btn:hover{ background:#fdeef2; }
 .dlabel .wd{ font-family:var(--zh); font-size:12.5px; color:var(--ink-soft); font-weight:400; margin-left:6px; }
 .dlabel .rel{ display:inline-block; font-family:var(--display); font-size:9.5px; font-weight:600; letter-spacing:0.06em;
   text-transform:uppercase; color:#fff; background:var(--accent); border-radius:999px; padding:1px 7px; margin-left:7px; vertical-align:middle; }
@@ -140,7 +161,12 @@ body.dragging{ cursor:grabbing; user-select:none; }
 .emain{ flex:1; min-width:0; }
 .etext{ font-family:var(--zh); font-size:15px; color:var(--ink); word-break:break-word; cursor:text; }
 .etags{ display:flex; flex-wrap:wrap; gap:4px; margin-top:6px; }
-.tchip{ font-family:var(--zh); font-size:11px; padding:2px 9px; border-radius:999px; color:#fff; user-select:none; }
+.tchip{ font-family:var(--zh); font-size:11px; padding:2px 9px; border-radius:999px; color:#fff; user-select:none; cursor:grab; touch-action:none; }
+.tchip:active{ cursor:grabbing; }
+.tchip.chip-src{ opacity:0.3; }
+.topt{ cursor:grab; }
+.topt.chip-src{ opacity:0.3; }
+.chip-drop{ display:inline-block; width:2px; height:16px; background:var(--accent); border-radius:2px; vertical-align:middle; margin:0 1px; animation:fadeIn 0.15s; }
 .eact{ display:flex; gap:1px; opacity:0; transition:opacity 0.18s; }
 .entry:hover .eact{ opacity:1; }
 .mbtn{ width:25px; height:25px; border-radius:8px; border:none; background:transparent; color:var(--ink-faint);
@@ -317,7 +343,7 @@ body.dragging{ cursor:grabbing; user-select:none; }
       </div>
       <div class="datebar">
         <span class="darr" id="prev">‹</span>
-        <div class="dlabel" id="dlabel"></div>
+        <div class="dlabel" id="dlabel" title="点击选日期"></div>
         <span class="darr" id="next">›</span>
       </div>
       <div style="text-align:center"><span class="djump zh" id="djump" style="display:none">↩ 回今天</span></div>
@@ -606,6 +632,54 @@ function insertEntryAt(day,entry,beforeId){
   if(beforeId){ const i=day.entries.findIndex(e=>e.id===beforeId); if(i>=0){ day.entries.splice(i,0,entry); return; } }
   day.entries.push(entry);
 }
+// ---- chip reorder: long-press/drag a chip to reorder within its row; plain click = onClick ----
+// getArr() returns the ordered array of ids; setArr(newArr) commits; onClick(id) handles tap; rerender() redraws
+function makeChipReorder(chipEl, id, container, getArr, setArr, onClick, rerender){
+  let cd=null; // {x,y,started}
+  const start=(e)=>{ if(e.button!==undefined&&e.button!==0)return; const pt=e.touches?e.touches[0]:e;
+    cd={x:pt.clientX,y:pt.clientY,started:false,ghost:null};
+    document.addEventListener('mousemove',mv,{passive:false}); document.addEventListener('mouseup',up);
+    document.addEventListener('touchmove',mv,{passive:false}); document.addEventListener('touchend',up); document.addEventListener('touchcancel',up); };
+  const mv=(e)=>{ if(!cd)return; const pt=e.touches?e.touches[0]:e; const dx=pt.clientX-cd.x, dy=pt.clientY-cd.y;
+    if(!cd.started){ if(Math.sqrt(dx*dx+dy*dy)<6) return; cd.started=true; document.body.classList.add('dragging');
+      chipEl.classList.add('chip-src'); cd.ghost=document.createElement('div'); cd.ghost.className='drag-ghost zh'; cd.ghost.textContent=chipEl.textContent; document.body.appendChild(cd.ghost); }
+    e.preventDefault();
+    cd.ghost.style.left=(pt.clientX+12)+'px'; cd.ghost.style.top=(pt.clientY+12)+'px';
+    // find insertion among sibling chips
+    const chips=Array.from(container.querySelectorAll('[data-chip-id]')).filter(c=>c!==chipEl);
+    let idx=chips.length;
+    for(let i=0;i<chips.length;i++){ const r=chips[i].getBoundingClientRect(); if(pt.clientX<r.left+r.width/2 && pt.clientY<r.bottom){ idx=i; break; } }
+    container.querySelectorAll('.chip-drop').forEach(m=>m.remove());
+    const mark=document.createElement('span'); mark.className='chip-drop';
+    if(idx===chips.length){ if(chips.length)chips[chips.length-1].after(mark); else container.appendChild(mark); } else chips[idx].before(mark);
+    cd.targetIdx=idx;
+  };
+  const up=()=>{ document.removeEventListener('mousemove',mv); document.removeEventListener('mouseup',up);
+    document.removeEventListener('touchmove',mv); document.removeEventListener('touchend',up); document.removeEventListener('touchcancel',up);
+    if(!cd){ return; }
+    if(!cd.started){ cd=null; onClick(id); return; } // was a tap
+    // commit reorder
+    document.body.classList.remove('dragging'); if(cd.ghost)cd.ghost.remove();
+    container.querySelectorAll('.chip-drop').forEach(m=>m.remove()); chipEl.classList.remove('chip-src');
+    const arr=getArr(); const from=arr.indexOf(id); let to=cd.targetIdx;
+    if(from>=0){ const a=[...arr]; a.splice(from,1); if(from<to)to--; a.splice(to,0,id); setArr(a); }
+    cd=null; rerender();
+  };
+  chipEl.addEventListener('mousedown',start); chipEl.addEventListener('touchstart',start,{passive:false});
+}
+// build the displayed tag-chip row for an entry/pool item; chips are reorderable (drag) — no click action
+function buildTagChips(item){
+  const tw=document.createElement('div'); tw.className='etags';
+  (item.tags||[]).forEach(tid=>{ const t=tagById(tid); if(!t)return;
+    const c=document.createElement('span'); c.className='tchip'; c.dataset.chipId=tid; c.style.background=t.raw; c.textContent=t.label; c.title='拖动调整顺序';
+    makeChipReorder(c, tid, tw,
+      ()=>item.tags,
+      (newOrder)=>{ item.tags=newOrder; save(); },
+      ()=>{}, // plain click on a displayed chip does nothing
+      ()=>{ renderEntries(); renderPool(); });
+    tw.appendChild(c); });
+  return tw;
+}
 function renderEntries(animId){ const box=document.getElementById('entries'); const day=getDay(viewDate); box.innerHTML='';
   const open=day.entries.filter(e=>!e.done);
   const done=day.entries.filter(e=>e.done);
@@ -650,7 +724,7 @@ function buildEntry(en,anim){ const row=document.createElement('div'); row.class
   const chk=document.createElement('div'); chk.className='echeck'+(en.done?' on':''); chk.title=en.done?'已完成':'点一下打勾'; chk.onclick=()=>toggleDone(en.id); row.appendChild(chk);
   const main=document.createElement('div'); main.className='emain';
   const txt=document.createElement('div'); txt.className='etext zh'; txt.textContent=en.text; txt.title='点击编辑'; txt.onclick=()=>editEntry(en.id); main.appendChild(txt);
-  if(en.tags&&en.tags.length){const tw=document.createElement('div');tw.className='etags';en.tags.forEach(tid=>{const t=tagById(tid);if(!t)return;const c=document.createElement('span');c.className='tchip';c.style.background=t.raw;c.textContent=t.label;tw.appendChild(c);});main.appendChild(tw);}
+  if(en.tags&&en.tags.length){main.appendChild(buildTagChips(en));}
   row.appendChild(main); const acts=document.createElement('div'); acts.className='eact';
   const gp=document.createElement('button'); gp.className='mbtn'; gp.innerHTML='❏'; gp.title='归到一组'; gp.onclick=()=>assignGroup(en.id);
   const tg=document.createElement('button'); tg.className='mbtn'; tg.innerHTML='⊕'; tg.title='标签'; tg.onclick=()=>retag(en.id,row);
@@ -710,7 +784,7 @@ function retag(id,row){ const day=getDay(viewDate); const en=day.entries.find(e=
   const pick=buildTagPicker([...(en.tags||[])],(sel)=>{en.tags=[...sel];save();refreshInline(id);}); pick.classList.add('inline'); pick.style.width='100%'; row.querySelector('.emain').appendChild(pick); }
 function refreshInline(id){ const day=getDay(viewDate); const en=day.entries.find(e=>e.id===id); if(!en)return;
   const row=document.querySelector(`#entries .entry[data-id="${id}"]`); if(!row)return; let tw=row.querySelector('.etags'); if(tw)tw.remove();
-  if(en.tags&&en.tags.length){tw=document.createElement('div');tw.className='etags';en.tags.forEach(tid=>{const t=tagById(tid);if(!t)return;const c=document.createElement('span');c.className='tchip';c.style.background=t.raw;c.textContent=t.label;tw.appendChild(c);});const pk=row.querySelector('.tagpick.inline');row.querySelector('.emain').insertBefore(tw,pk);}
+  if(en.tags&&en.tags.length){tw=buildTagChips(en);const pk=row.querySelector('.tagpick.inline');row.querySelector('.emain').insertBefore(tw,pk);}
   renderViews(); }
 function removeEntry(id){ const day=getDay(viewDate); const idx=day.entries.findIndex(e=>e.id===id); if(idx<0)return;
   const removed=day.entries[idx]; const snap=viewDate; const row=document.querySelector(`#entries .entry[data-id="${id}"]`);
@@ -720,9 +794,13 @@ function removeEntry(id){ const day=getDay(viewDate); const idx=day.entries.find
 function buildTagPicker(selArr,onChange){ let sel=[...selArr]; const pick=document.createElement('div'); pick.className='tagpick';
   function redraw(){ pick.innerHTML='';
     state.tags.forEach(t=>{ const on=sel.includes(t.id);
-      const wrap=document.createElement('span'); wrap.className='topt-wrap';
+      const wrap=document.createElement('span'); wrap.className='topt-wrap'; wrap.dataset.chipId=t.id;
       const o=document.createElement('span'); o.className='topt zh'; o.textContent=t.label; o.style.borderColor=t.raw; o.style.color=on?'#fff':t.raw; o.style.background=on?t.raw:'transparent';
-      o.onclick=()=>{ if(sel.includes(t.id))sel=sel.filter(x=>x!==t.id);else sel.push(t.id); onChange([...sel]); redraw(); };
+      makeChipReorder(o, t.id, pick,
+        ()=>state.tags.map(x=>x.id),
+        (newOrder)=>{ state.tags.sort((a,b)=>newOrder.indexOf(a.id)-newOrder.indexOf(b.id)); save(); },
+        (id)=>{ if(sel.includes(id))sel=sel.filter(x=>x!==id);else sel.push(id); onChange([...sel]); redraw(); },
+        ()=>redraw());
       const ed=document.createElement('span'); ed.className='topt-edit'; ed.innerHTML='⋯'; ed.title='改这个标签';
       ed.onclick=(e)=>{ e.stopPropagation(); editTag(t.id,()=>redraw()); };
       wrap.appendChild(o); wrap.appendChild(ed); pick.appendChild(wrap); });
@@ -782,7 +860,7 @@ function buildPool(p,anim){ const row=document.createElement('div'); row.classNa
   const pk=document.createElement('div'); pk.className='pcheck'; pk.title='这天做了 → 挪到上面'; pk.onclick=()=>pickPool(p.id); row.appendChild(pk);
   const main=document.createElement('div'); main.className='emain';
   const txt=document.createElement('div'); txt.className='etext zh'; txt.style.color='var(--ink-soft)'; txt.textContent=p.text; txt.title='点击编辑'; txt.onclick=()=>editPool(p.id); main.appendChild(txt);
-  if(p.tags&&p.tags.length){const tw=document.createElement('div');tw.className='etags';p.tags.forEach(tid=>{const t=tagById(tid);if(!t)return;const c=document.createElement('span');c.className='tchip';c.style.background=t.raw;c.textContent=t.label;tw.appendChild(c);});main.appendChild(tw);}
+  if(p.tags&&p.tags.length){main.appendChild(buildTagChips(p));}
   row.appendChild(main); const acts=document.createElement('div'); acts.className='eact';
   const tg=document.createElement('button'); tg.className='mbtn'; tg.innerHTML='⊕'; tg.onclick=()=>retagPool(p.id,row);
   const dl=document.createElement('button'); dl.className='mbtn'; dl.innerHTML='×'; dl.onclick=()=>removePool(p.id);
@@ -800,12 +878,12 @@ function editPool(id){ const p=state.pool.find(x=>x.id===id); if(!p)return; cons
 function retagPool(id,row){ const p=state.pool.find(x=>x.id===id); if(!p)return; const ex=row.querySelector('.tagpick.inline'); if(ex){ex.remove();return;}
   const pick=buildTagPicker([...(p.tags||[])],(sel)=>{p.tags=[...sel];save();refreshPoolInline(id);}); pick.classList.add('inline'); pick.style.width='100%'; row.querySelector('.emain').appendChild(pick); }
 function refreshPoolInline(id){ const p=state.pool.find(x=>x.id===id); if(!p)return; const row=document.querySelector(`#pool .entry[data-id="${id}"]`); if(!row)return; let tw=row.querySelector('.etags'); if(tw)tw.remove();
-  if(p.tags&&p.tags.length){tw=document.createElement('div');tw.className='etags';p.tags.forEach(tid=>{const t=tagById(tid);if(!t)return;const c=document.createElement('span');c.className='tchip';c.style.background=t.raw;c.textContent=t.label;tw.appendChild(c);});const pk=row.querySelector('.tagpick.inline');row.querySelector('.emain').insertBefore(tw,pk);} }
+  if(p.tags&&p.tags.length){tw=buildTagChips(p);const pk=row.querySelector('.tagpick.inline');row.querySelector('.emain').insertBefore(tw,pk);} }
 function pickPool(id){ const idx=state.pool.findIndex(x=>x.id===id); if(idx<0)return; const p=state.pool[idx];
   const row=document.querySelector(`#pool .entry[data-id="${id}"]`); const eid='e'+Date.now();
-  getDay(viewDate).entries.push({id:eid,text:p.text,tags:[...(p.tags||[])],done:false}); state.pool.splice(idx,1); save();
+  getDay(viewDate).entries.push({id:eid,text:p.text,tags:[...(p.tags||[])],group:null,done:true}); state.pool.splice(idx,1); save();
   if(row){const pk=row.querySelector('.pcheck');pk.innerHTML='✓';pk.style.background='#a8d3a0';pk.style.borderColor='#a8d3a0';setTimeout(()=>{row.classList.add('leaving');setTimeout(()=>{renderPool();renderEntries(eid);renderViews();},230);},160);}
-  else{renderPool();renderEntries(eid);renderViews();} toast(isToday()?'挪到今天啦 ✓':'挪过去啦 ✓'); }
+  else{renderPool();renderEntries(eid);renderViews();} toast(isToday()?'今天搞定一件 ✓':'这天搞定一件 ✓'); }
 function removePool(id){ const idx=state.pool.findIndex(x=>x.id===id); if(idx<0)return; const p=state.pool[idx];
   const row=document.querySelector(`#pool .entry[data-id="${id}"]`); state.pool.splice(idx,1); save();
   if(row){row.classList.add('leaving');setTimeout(renderPool,230);}else renderPool();
@@ -870,6 +948,39 @@ document.querySelectorAll('.vtab').forEach(tab=>{ tab.onclick=()=>{ currentView=
 document.getElementById('prev').onclick=()=>{const d=parseKey(viewDate);d.setDate(d.getDate()-1);viewDate=keyOf(d);switchDay();};
 document.getElementById('next').onclick=()=>{const d=parseKey(viewDate);d.setDate(d.getDate()+1);viewDate=keyOf(d);switchDay();};
 document.getElementById('djump').onclick=()=>{viewDate=todayKey();switchDay();};
+let calMonth=null; // {y,m} currently shown month in calendar
+document.getElementById('dlabel').onclick=()=>openCalendar();
+function openCalendar(){
+  const h=document.getElementById('pickhost'); h.innerHTML='';
+  const vd=parseKey(viewDate); if(!calMonth) calMonth={y:vd.getFullYear(),m:vd.getMonth()};
+  const pop=document.createElement('div'); pop.className='cal-pop';
+  function draw(){
+    const {y,m}=calMonth; const first=new Date(y,m,1); const startDow=(first.getDay()+6)%7; // Mon=0
+    const daysInMonth=new Date(y,m+1,0).getDate();
+    const monthNames=['1月','2月','3月','4月','5月','6月','7月','8月','9月','10月','11月','12月'];
+    let html=`<div class="cal-head"><span class="cal-nav" data-d="-1">‹</span><span class="cal-title">${y} 年 ${monthNames[m]}</span><span class="cal-nav" data-d="1">›</span></div>`;
+    html+=`<div class="cal-grid">`;
+    ['一','二','三','四','五','六','日'].forEach(w=>html+=`<div class="cal-wd">${w}</div>`);
+    for(let i=0;i<startDow;i++) html+=`<div class="cal-cell empty"></div>`;
+    const tk=todayKey();
+    for(let d=1;d<=daysInMonth;d++){ const k=`${y}-${pad(m+1)}-${pad(d)}`;
+      const has=state.days[k]&&state.days[k].entries&&state.days[k].entries.length>0;
+      const isToday=k===tk; const isView=k===viewDate;
+      html+=`<div class="cal-cell${isView?' view':''}${isToday?' today':''}" data-k="${k}">${d}${has?'<span class="cal-dot"></span>':''}</div>`;
+    }
+    html+=`</div><div class="cal-foot"><span class="cal-today-btn">↩ 回今天</span></div>`;
+    pop.innerHTML=html;
+    pop.querySelectorAll('.cal-nav').forEach(n=>n.onclick=()=>{ calMonth.m+=parseInt(n.dataset.d); if(calMonth.m<0){calMonth.m=11;calMonth.y--;} if(calMonth.m>11){calMonth.m=0;calMonth.y++;} draw(); });
+    pop.querySelectorAll('.cal-cell[data-k]').forEach(c=>c.onclick=()=>{ viewDate=c.dataset.k; h.innerHTML=''; switchDay(); });
+    pop.querySelector('.cal-today-btn').onclick=()=>{ viewDate=todayKey(); calMonth={y:new Date().getFullYear(),m:new Date().getMonth()}; h.innerHTML=''; switchDay(); };
+  }
+  draw(); h.appendChild(pop);
+  const anchor=document.getElementById('dlabel').getBoundingClientRect();
+  let top=anchor.bottom+8, left=anchor.left+anchor.width/2-140;
+  if(left<12)left=12; if(left+280>window.innerWidth-12)left=window.innerWidth-292;
+  pop.style.top=top+'px'; pop.style.left=left+'px';
+  setTimeout(()=>{ const close=e=>{ if(!pop.contains(e.target)){h.innerHTML='';document.removeEventListener('mousedown',close);} }; document.addEventListener('mousedown',close); },0);
+}
 document.getElementById('export').onclick=()=>{const b=new Blob([JSON.stringify(state,null,2)],{type:'application/json'});const u=URL.createObjectURL(b);const a=document.createElement('a');a.href=u;a.download='today-'+todayKey()+'.json';a.click();URL.revokeObjectURL(u);};
 document.getElementById('import').onclick=async()=>{const inp=document.createElement('input');inp.type='file';inp.accept='.json';inp.onchange=async e=>{const f=e.target.files[0];if(!f)return;const ok=await dialog({title:'导入数据？',msg:'导入会<b>覆盖</b>当前所有数据。建议先 Export 备份现在的。',ok:'导入覆盖'});if(!ok)return;const r=new FileReader();r.onload=ev=>{try{const im=JSON.parse(ev.target.result);if(!im.days){toast('文件结构不对');return;}state=migrate(im);save();switchDay();renderPool();toast('导入成功');}catch(err){toast('导入失败');}};r.readAsText(f);};inp.click();};
 // ===== render gate: only render app when signed in + loaded =====
