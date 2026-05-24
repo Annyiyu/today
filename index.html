@@ -130,6 +130,10 @@ body {
 .sec-title{ font-family:var(--zh); font-size:17px; color:var(--ink); flex-shrink:0; }
 .sec-note{ font-family:var(--zh); font-size:12.5px; color:var(--ink-faint); flex-shrink:0; }
 .sec-line{ flex:1; height:1px; background:var(--line); align-self:center; }
+.pool-head{ cursor:pointer; user-select:none; border-radius:8px; margin-left:-6px; padding-left:6px; transition:background 0.15s; }
+.pool-head:hover{ background:rgba(242,157,177,0.06); }
+.pool-caret{ font-family:var(--display); font-size:11px; color:var(--ink-faint); transition:transform 0.2s; display:inline-block; margin-right:2px; }
+.pool-head:hover .pool-caret{ color:var(--accent-deep); }
 
 .entries{ display:flex; flex-direction:column; gap:6px; }
 .entry{ display:flex; align-items:flex-start; gap:9px; padding:9px 11px; background:rgba(255,255,255,0.78);
@@ -371,7 +375,7 @@ body.dragging{ cursor:grabbing; user-select:none; }
         <div class="addzone" id="addzone"></div>
       </div>
       <div class="sec">
-        <div class="sec-head"><span class="sec-title zh">以后</span><span class="sec-note zh">心之所向 · 来日方长</span><span class="sec-line"></span></div>
+        <div class="sec-head pool-head" id="pool-head"><span class="pool-caret" id="pool-caret">▾</span><span class="sec-title zh">以后</span><span class="sec-note zh" id="pool-note">心之所向 · 来日方长</span><span class="sec-line"></span></div>
         <div class="entries" id="pool"></div>
         <div class="addzone" id="pooladd"></div>
       </div>
@@ -434,7 +438,7 @@ const sb=supabase.createClient(SUPABASE_URL,SUPABASE_KEY);
 let state=null; let session=null; let viewDate=todayKey();
 let addingEntry=false, entryTagSel=[], addingPool=false, currentView='weave', diaryTimer=null;
 let groupFold={}; // groupName -> bool (collapsed)
-function fresh(){ return { tags:JSON.parse(JSON.stringify(DEFAULT_TAGS)), days:{}, pool:[] }; }
+function fresh(){ return { tags:JSON.parse(JSON.stringify(DEFAULT_TAGS)), days:{}, pool:[], poolFold:false }; }
 function migrate(s){
   if(!Array.isArray(s.tags)||!s.tags.length) s.tags=JSON.parse(JSON.stringify(DEFAULT_TAGS));
   if(!s.days) s.days={}; if(!Array.isArray(s.pool)) s.pool=[];
@@ -442,7 +446,8 @@ function migrate(s){
     d.entries.forEach(e=>{ if(typeof e.done!=='boolean')e.done=false; if(!Array.isArray(e.tags))e.tags=[]; if(!('group'in e))e.group=null; });
     if(typeof d.diary!=='string')d.diary=''; if(!d.mood)d.mood={m:null,n:null,e:null};
     if(typeof d.doneFold!=='boolean')d.doneFold=true; }
-  s.pool.forEach(p=>{ if(!Array.isArray(p.tags))p.tags=[]; if(!('group'in p))p.group=null; }); return s;
+  s.pool.forEach(p=>{ if(!Array.isArray(p.tags))p.tags=[]; if(!('group'in p))p.group=null; });
+  if(typeof s.poolFold!=='boolean') s.poolFold=false; return s;
 }
 // ===== cloud save (debounced + exponential backoff retry) =====
 let saveTimer=null, pendingSave=false, saving=false, failCount=0;
@@ -862,8 +867,21 @@ function manageAllTags(after){ const h=document.getElementById('dlghost'); h.inn
   dlg.querySelector('#tmnew').onclick=()=>newTag(()=>setTimeout(()=>manageAllTags(after),0));
 }
 function renderPool(animId){ const box=document.getElementById('pool'); box.innerHTML='';
+  const addZone=document.getElementById('pooladd');
+  const caret=document.getElementById('pool-caret'); const note=document.getElementById('pool-note');
+  const folded=!!state.poolFold;
+  if(caret) caret.textContent=folded?'▸':'▾';
+  // when folded: show count in the note slot, hide list + add zone
+  if(folded){
+    if(note) note.textContent=state.pool.length>0?`收起 · ${state.pool.length} 个念头`:'收起';
+    if(addZone) addZone.style.display='none';
+    return;
+  }
+  if(note) note.textContent='心之所向 · 来日方长';
+  if(addZone) addZone.style.display='';
   if(state.pool.length===0&&!addingPool){ /* 空着就纯留白 */ }
   state.pool.forEach(p=>box.appendChild(buildPool(p,p.id===animId))); renderPoolAdd(); }
+function togglePoolFold(){ state.poolFold=!state.poolFold; save(); renderPool(); }
 function buildPool(p,anim){ const row=document.createElement('div'); row.className='entry'+(anim?' adding':''); row.dataset.id=p.id; row.dataset.kind='pool'; row.style.background='transparent'; row.style.borderStyle='dashed';
   const grip=document.createElement('div'); grip.className='grip'; grip.innerHTML='⋮⋮'; grip.title='拖动'; attachDrag(grip,'pool',p.id); row.appendChild(grip);
   const pk=document.createElement('div'); pk.className='pcheck'; pk.title='这天做了 → 挪到上面'; pk.onclick=()=>pickPool(p.id); row.appendChild(pk);
@@ -994,6 +1012,7 @@ document.querySelectorAll('.vtab').forEach(tab=>{ tab.onclick=()=>{ currentView=
 document.getElementById('prev').onclick=()=>{const d=parseKey(viewDate);d.setDate(d.getDate()-1);viewDate=keyOf(d);switchDay();};
 document.getElementById('next').onclick=()=>{const d=parseKey(viewDate);d.setDate(d.getDate()+1);viewDate=keyOf(d);switchDay();};
 document.getElementById('djump').onclick=()=>{viewDate=todayKey();switchDay();};
+document.getElementById('pool-head').onclick=(e)=>{ if(e.target.closest('.sec-line'))return; togglePoolFold(); };
 let calMonth=null; // {y,m} currently shown month in calendar
 document.getElementById('dlabel').onclick=()=>openCalendar();
 function openCalendar(){
