@@ -210,6 +210,11 @@ body.dragging{ cursor:grabbing; user-select:none; }
 .group-cluster:hover .gedit, .group-cluster:hover .gmove{ opacity:0.7; }
 .group-head .gedit:hover, .group-head .gmove:hover{ opacity:1 !important; }
 .group-body{ display:flex; flex-direction:column; gap:6px; }
+.group-add{ margin-top:4px; padding-top:4px; }
+.group-add-btn{ font-family:var(--zh); font-size:12px; background:none; border:none; cursor:pointer; padding:3px 6px; border-radius:6px; opacity:0; transition:opacity 0.18s, background 0.15s; }
+.group-cluster:hover .group-add-btn{ opacity:0.65; }
+.group-add-btn:hover{ opacity:1; background:rgba(255,255,255,0.5); }
+.group-add-input{ font-family:var(--zh); font-size:14px; color:var(--ink); background:transparent; border:none; border-bottom:1px solid; outline:none; padding:3px 2px; width:90%; }
 .group-cluster .entry{ background:rgba(255,255,255,0.55); }
 .gsw-grid{ display:grid; grid-template-columns:repeat(8,1fr); gap:8px; margin-bottom:18px; }
 .gsw{ width:26px; height:26px; border-radius:50%; cursor:pointer; transition:transform 0.12s; }
@@ -481,6 +486,7 @@ const sb=supabase.createClient(SUPABASE_URL,SUPABASE_KEY);
 
 let state=null; let session=null; let viewDate=todayKey();
 let addingEntry=false, entryTagSel=[], addingPool=false, currentView='weave', diaryTimer=null;
+let addingInGroup=null; // {ctx, gname} when adding directly inside a group
 let groupFold={}; // groupName -> bool (collapsed)
 let selectMode=null; // null | 'today' | 'pool'
 let selectedIds=new Set();
@@ -790,9 +796,46 @@ function renderClustered(container, list, animId, ctx){
     head.appendChild(edit);
     cluster.appendChild(head);
     if(!folded){ const body=document.createElement('div'); body.className='group-body';
-      groups[gname].forEach(it=>body.appendChild(buildItem(it))); cluster.appendChild(body); }
+      groups[gname].forEach(it=>body.appendChild(buildItem(it)));
+      if(!selectMode) body.appendChild(buildGroupAddRow(ctx, gname, groups[gname], col));
+      cluster.appendChild(body); }
     container.appendChild(cluster);
   });
+}
+// "+ 加一件" row inside an expanded group; carries last entry's tags
+function buildGroupAddRow(ctx, gname, groupItems, col){
+  const wrap=document.createElement('div'); wrap.className='group-add';
+  const isAdding = addingInGroup && addingInGroup.ctx===ctx && addingInGroup.gname===gname;
+  if(isAdding){
+    const input=document.createElement('input'); input.className='group-add-input zh'; input.type='text'; input.placeholder='在这组加一件…';
+    input.style.borderBottomColor=col.line;
+    let committed=false;
+    const commit=(keep)=>{ if(committed)return; committed=true;
+      const v=input.value.trim();
+      if(v){
+        // carry tags from the last item in this group
+        const last=groupItems[groupItems.length-1];
+        const carriedTags=last&&last.tags?[...last.tags]:[];
+        if(ctx==='pool'){ state.pool.push({id:'p'+Date.now(),text:v,tags:carriedTags,group:gname}); }
+        else { getDay(viewDate).entries.push({id:'e'+Date.now(),text:v,tags:carriedTags,group:gname,done:false}); }
+        save();
+      }
+      addingInGroup = (v&&keep) ? {ctx,gname} : null; // keep adding more if Enter
+      ctx==='pool'?renderPool():renderEntries();
+      if(v&&keep){ // refocus the fresh input
+        setTimeout(()=>{ const sel=document.querySelector('.group-cluster[data-group="'+CSS.escape(gname)+'"][data-ctx="'+ctx+'"] .group-add-input'); if(sel)sel.focus(); },0);
+      }
+    };
+    input.onkeydown=(e)=>{ if(e.key==='Enter'){ committed=false; commit(true); } else if(e.key==='Escape'){ committed=true; addingInGroup=null; ctx==='pool'?renderPool():renderEntries(); } };
+    input.onblur=()=>commit(false);
+    wrap.appendChild(input);
+    setTimeout(()=>input.focus(),0);
+  } else {
+    const btn=document.createElement('button'); btn.className='group-add-btn zh'; btn.textContent='+ 加一件'; btn.style.color=col.name;
+    btn.onclick=(e)=>{ e.stopPropagation(); addingInGroup={ctx,gname}; ctx==='pool'?renderPool():renderEntries(); };
+    wrap.appendChild(btn);
+  }
+  return wrap;
 }
 function buildEntry(en,anim){ const row=document.createElement('div'); row.className='entry'+(anim?' adding':'')+(en.done?' done':''); row.dataset.id=en.id; row.dataset.kind='entry';
   if(selectMode==='today'){
