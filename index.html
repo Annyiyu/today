@@ -291,8 +291,10 @@ body.dragging{ cursor:grabbing; user-select:none; }
 .diary-head{ font-family:var(--hand); font-size:38px; color:var(--ink); position:relative; z-index:1; }
 .diary-sub{ font-family:var(--zh); font-size:12.5px; color:var(--ink-soft); margin-top:7px; margin-bottom:20px; position:relative; z-index:1; }
 .diary-area{ position:relative; z-index:1; width:100%; min-height:420px; border:none; background:transparent; outline:none;
-  resize:none; font-family:var(--zh); font-size:15px; line-height:2.0; color:var(--ink);
-  background-image:repeating-linear-gradient(transparent, transparent 31px, rgba(80,75,95,0.07) 32px); }
+  resize:none; font-family:var(--zh); font-size:15px; line-height:32px; color:var(--ink);
+  padding-top:5px;
+  background-image:repeating-linear-gradient(transparent, transparent 31px, rgba(80,75,95,0.07) 32px);
+  background-position:0 5px; }
 .diary-area::placeholder{ color:var(--ink-faint); }
 .diary-saved{ position:absolute; top:30px; right:30px; font-family:var(--display); font-size:9px; letter-spacing:0.1em; text-transform:uppercase; color:#a8d3a0; opacity:0; transition:opacity 0.3s; z-index:2; }
 .diary-saved.show{ opacity:0.8; }
@@ -1224,7 +1226,7 @@ function renderWeave(){ const box=document.getElementById('weave'); box.innerHTM
   // collect per-day per-tag weight
   const dayKeys=[]; for(let i=0;i<N;i++){ const d=new Date(start); d.setDate(start.getDate()+i); dayKeys.push(keyOf(d)); }
   const used={}; // tagId -> array(N) of weights
-  dayKeys.forEach((k,di)=>{ const day=state.days[k]; if(!day)return; (day.entries||[]).forEach(en=>{ (en.tags||[]).forEach(t=>{ if(!used[t])used[t]=new Array(N).fill(0); used[t][di]+=1; }); }); });
+  dayKeys.forEach((k,di)=>{ const day=state.days[k]; if(!day)return; (day.entries||[]).forEach(en=>{ if(!en.done)return; (en.tags||[]).forEach(t=>{ if(!used[t])used[t]=new Array(N).fill(0); used[t][di]+=1; }); }); });
   const tagIds=Object.keys(used);
   if(tagIds.length===0){ box.innerHTML='<div class="weave-empty zh">给记录打点标签，布就会有颜色</div>'; wcap.textContent=''; return; }
   // sort rows by hue (so neighbouring rows blend harmoniously)
@@ -1253,7 +1255,7 @@ function hexToRgba(hex,a){ hex=hex.replace('#',''); let r,g,b;
   return `rgba(${r},${g},${b},${a})`; }
 let ringLegendOpen=false;
 function renderRing(){ const counts={}; let tagTotal=0; let entryCount=0; const today=new Date(); today.setHours(0,0,0,0); const start=new Date(today); start.setDate(today.getDate()-29);
-  for(const k in state.days){ const d=parseKey(k); if(d>=start&&d<=today){(state.days[k].entries||[]).forEach(en=>{ entryCount++; (en.tags||[]).forEach(t=>{counts[t]=(counts[t]||0)+1;tagTotal++;});});} }
+  for(const k in state.days){ const d=parseKey(k); if(d>=start&&d<=today){(state.days[k].entries||[]).forEach(en=>{ if(!en.done)return; entryCount++; (en.tags||[]).forEach(t=>{counts[t]=(counts[t]||0)+1;tagTotal++;});});} }
   const svgBox=document.getElementById('ringsvg'); const lg=document.getElementById('rleg');
   if(entryCount===0){svgBox.innerHTML='';lg.innerHTML='<div class="rempty zh">最近 30 天记几件事<br>这里会开出一个色环</div>';return;}
   if(tagTotal===0){svgBox.innerHTML=`<svg width="132" height="132" viewBox="0 0 132 132"><circle cx="66" cy="66" r="52" fill="none" stroke="rgba(80,75,95,0.08)" stroke-width="20"/><text x="66" y="62" text-anchor="middle" font-family="Quicksand" font-weight="700" font-size="22" fill="#4a4754">${entryCount}</text><text x="66" y="80" text-anchor="middle" font-family="LXGW WenKai TC" font-size="11" fill="#918d9c">件事</text></svg>`;lg.innerHTML='<div class="rempty zh">这些事还没打标签<br>打了标签，色环就有颜色啦</div>';return;}
