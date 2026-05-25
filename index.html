@@ -253,13 +253,14 @@ body.dragging{ cursor:grabbing; user-select:none; }
 .vtab.on{ background:var(--ink); color:var(--bg); border-color:var(--ink); }
 .vcard{ background:rgba(255,255,255,0.7); border:1px solid var(--line); border-radius:15px; padding:17px 16px 14px; }
 .weave-scroll{ overflow-x:auto; padding-bottom:5px; }
-.weave{ display:flex; gap:3px; align-items:flex-end; min-height:54px; }
-.wcol{ display:flex; flex-direction:column-reverse; gap:2px; width:12px; flex-shrink:0; cursor:pointer; transition:opacity 0.15s; }
-.wcol:hover{ opacity:0.65; }
-.wcol.today .wseg:first-child{ box-shadow:0 0 0 2px var(--ink); }
-.wcol.viewing{ outline:2px solid var(--accent); outline-offset:2px; border-radius:4px; }
-.wseg{ width:100%; height:10px; border-radius:3px; }
-.wempty{ width:12px; height:4px; border-radius:2px; background:var(--line); flex-shrink:0; align-self:flex-end; cursor:pointer; }
+.weave{ display:flex; gap:0; align-items:stretch; height:64px; border-radius:8px; overflow:hidden; }
+.wcol{ display:flex; flex-direction:column; width:11px; flex-shrink:0; cursor:pointer; transition:filter 0.15s; position:relative; }
+.wcol:hover{ filter:brightness(1.08) saturate(1.1); }
+.wcol.viewing::after{ content:''; position:absolute; inset:0; outline:2px solid var(--ink); outline-offset:-2px; border-radius:2px; pointer-events:none; }
+.wcol.today::after{ content:''; position:absolute; top:0; left:0; right:0; height:3px; background:var(--ink); opacity:0.55; }
+.wseg{ width:100%; }
+.wcol-empty{ width:11px; flex-shrink:0; cursor:pointer; align-self:stretch; display:flex; align-items:center; }
+.wcol-empty::before{ content:''; width:100%; height:2px; background:var(--line); }
 .vcap{ font-family:var(--zh); font-size:11.5px; color:var(--ink-soft); margin-top:12px; text-align:center; }
 .river{ display:flex; flex-direction:column; gap:3px; }
 .river-row{ display:flex; align-items:center; gap:8px; }
@@ -1152,19 +1153,34 @@ function renderDiary(){ const day=getDay(viewDate); const ta=document.getElement
 function renderViews(){ if(currentView==='weave')renderWeave(); else if(currentView==='ring')renderRing(); else renderRiver(); }
 function renderWeave(){ const box=document.getElementById('weave'); box.innerHTML='';
   const today=new Date(); today.setHours(0,0,0,0); const MAXDAYS=180;
-  // find earliest day with data (within MAXDAYS window); render from there to today (no long empty lead)
   let firstWithData=null;
   for(let i=MAXDAYS-1;i>=0;i--){ const d=new Date(today); d.setDate(today.getDate()-i); const k=keyOf(d); const day=state.days[k]; if(day&&day.entries.length>0){ firstWithData=i; break; } }
-  // if nothing yet, show a short recent strip (14 days) as gentle placeholder
   const span = firstWithData==null ? 14 : firstWithData;
   const start=new Date(today); start.setDate(today.getDate()-span);
+  let maxUnits=1;
+  for(let i=0;i<=span;i++){ const d=new Date(start); d.setDate(start.getDate()+i); const day=state.days[keyOf(d)];
+    if(day&&day.entries.length){ let u=0; day.entries.forEach(en=>{ u += Math.max(1,(en.tags||[]).length); }); if(u>maxUnits)maxUnits=u; } }
   for(let i=0;i<=span;i++){ const d=new Date(start); d.setDate(start.getDate()+i); const k=keyOf(d); const day=state.days[k];
-    if(day&&day.entries.length>0){ const col=document.createElement('div'); col.className='wcol'+(k===todayKey()?' today':'')+(k===viewDate?' viewing':''); col.title=k; col.onclick=()=>{viewDate=k;switchDay();};
-      const segs=[]; day.entries.forEach(en=>{ if(en.tags&&en.tags.length)en.tags.forEach(t=>segs.push(t)); else segs.push(null); });
-      segs.slice(0,6).forEach(t=>{const s=document.createElement('div');s.className='wseg';const tg=t?tagById(t):null;s.style.background=tg?tg.raw:'var(--ink-faint)';col.appendChild(s);}); box.appendChild(col);
-    } else { const e=document.createElement('div'); e.className='wempty'+(k===viewDate?' viewing':''); e.title=k; e.onclick=()=>{viewDate=k;switchDay();}; box.appendChild(e); } }
-  box.scrollLeft=box.scrollWidth; const w=Object.values(state.days).filter(d=>d.entries&&d.entries.length>0).length;
-  document.getElementById('wcap').textContent=w>0?`已经记下 ${w} 天的颜色`:'记几天，这里会织出你生活的颜色'; }
+    if(day&&day.entries.length>0){
+      const col=document.createElement('div'); col.className='wcol'+(k===todayKey()?' today':'')+(k===viewDate?' viewing':''); col.title=k+' · '+day.entries.length+'件'; col.onclick=()=>{viewDate=k;switchDay();};
+      const bands=[];
+      day.entries.forEach(en=>{ const tags=(en.tags||[]);
+        if(tags.length===0){ bands.push('var(--ink-faint)'); }
+        else tags.forEach(t=>{ const tg=tagById(t); bands.push(tg?tg.raw:'var(--ink-faint)'); });
+      });
+      const dens=Math.min(1,bands.length/maxUnits);
+      const op=0.42+0.58*dens;
+      bands.forEach((c,bi)=>{ const seg=document.createElement('div'); seg.className='wseg';
+        seg.style.flex='1'; seg.style.background=c; seg.style.opacity=op; if(bi>0)seg.style.marginTop='-1px';
+        col.appendChild(seg); });
+      box.appendChild(col);
+    } else {
+      const e=document.createElement('div'); e.className='wcol-empty'+(k===viewDate?' viewing':''); e.title=k+' · —'; e.onclick=()=>{viewDate=k;switchDay();}; box.appendChild(e);
+    }
+  }
+  box.scrollLeft=box.scrollWidth;
+  const w=Object.values(state.days).filter(d=>d.entries&&d.entries.length>0).length;
+  document.getElementById('wcap').textContent=w>0?`已经织进 ${w} 天的颜色`:'记几天，这里会织出你生活的颜色'; }
 let ringLegendOpen=false;
 function renderRing(){ const counts={}; let tagTotal=0; let entryCount=0; const today=new Date(); today.setHours(0,0,0,0); const start=new Date(today); start.setDate(today.getDate()-29);
   for(const k in state.days){ const d=parseKey(k); if(d>=start&&d<=today){(state.days[k].entries||[]).forEach(en=>{ entryCount++; (en.tags||[]).forEach(t=>{counts[t]=(counts[t]||0)+1;tagTotal++;});});} }
