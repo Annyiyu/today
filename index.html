@@ -211,6 +211,9 @@ body.dragging{ cursor:grabbing; user-select:none; }
 .group-head .gedit:hover, .group-head .gmove:hover{ opacity:1 !important; }
 .group-body{ display:flex; flex-direction:column; gap:6px; }
 .group-cluster .entry{ background:rgba(255,255,255,0.55); }
+.gsw-grid{ display:grid; grid-template-columns:repeat(8,1fr); gap:8px; margin-bottom:18px; }
+.gsw{ width:26px; height:26px; border-radius:50%; cursor:pointer; transition:transform 0.12s; }
+.gsw:hover{ transform:scale(1.15); }
 
 .gpick-opt{ font-family:var(--zh); font-size:12px; padding:4px 11px; border-radius:999px; cursor:pointer; border:1.5px solid var(--line-strong); color:var(--ink-soft); background:transparent; transition:all 0.15s; }
 .gpick-opt:hover{ border-color:var(--accent); color:var(--accent-deep); }
@@ -446,18 +449,33 @@ function moodColor(v){
   }
   return 'rgb(168,205,208)';
 }
-// curated soft macaron palette for group containers
+// curated soft macaron palette for group containers (16 sets)
 const GROUP_COLORS=[
-  {tint:'rgba(244,166,160,0.13)', line:'#ef9d97', name:'#c96f68'},
-  {tint:'rgba(148,184,224,0.14)', line:'#8fb3e0', name:'#5f86b8'},
-  {tint:'rgba(168,211,160,0.15)', line:'#a0cf98', name:'#6f9e68'},
-  {tint:'rgba(242,160,196,0.13)', line:'#f0a0c4', name:'#c06d92'},
-  {tint:'rgba(197,168,232,0.14)', line:'#c5a8e8', name:'#8a6fb8'},
-  {tint:'rgba(240,207,110,0.17)', line:'#ecc860', name:'#b0902f'},
-  {tint:'rgba(143,208,212,0.15)', line:'#8fd0d4', name:'#5f9ea2'},
-  {tint:'rgba(242,157,131,0.13)', line:'#f29d83', name:'#c06d53'},
+  {tint:'rgba(244,166,160,0.14)', line:'#ef9d97', name:'#c96f68'}, // 0 coral
+  {tint:'rgba(148,184,224,0.15)', line:'#8fb3e0', name:'#5f86b8'}, // 1 blue
+  {tint:'rgba(168,211,160,0.16)', line:'#a0cf98', name:'#6f9e68'}, // 2 green
+  {tint:'rgba(242,160,196,0.14)', line:'#f0a0c4', name:'#c06d92'}, // 3 pink
+  {tint:'rgba(197,168,232,0.15)', line:'#c5a8e8', name:'#8a6fb8'}, // 4 purple
+  {tint:'rgba(240,207,110,0.18)', line:'#ecc860', name:'#b0902f'}, // 5 yellow
+  {tint:'rgba(143,208,212,0.16)', line:'#8fd0d4', name:'#5f9ea2'}, // 6 teal
+  {tint:'rgba(242,157,131,0.14)', line:'#f29d83', name:'#c06d53'}, // 7 orange
+  {tint:'rgba(188,208,126,0.16)', line:'#bcd07e', name:'#86973f'}, // 8 olive
+  {tint:'rgba(232,160,184,0.14)', line:'#e8a0b8', name:'#b66d8a'}, // 9 rose
+  {tint:'rgba(160,200,176,0.16)', line:'#a0c8b0', name:'#5f8f74'}, // 10 sage
+  {tint:'rgba(208,184,144,0.16)', line:'#d0b890', name:'#9a8050'}, // 11 sand
+  {tint:'rgba(176,196,224,0.16)', line:'#b0c4e0', name:'#6f88b0'}, // 12 mist blue
+  {tint:'rgba(224,176,208,0.14)', line:'#e0b0d0', name:'#a86d98'}, // 13 lilac
+  {tint:'rgba(160,212,200,0.16)', line:'#a0d4c8', name:'#5f9e90'}, // 14 mint
+  {tint:'rgba(238,184,150,0.15)', line:'#eeb896', name:'#b87f53'}, // 15 apricot
 ];
-function groupColor(name){ let h=0; for(let i=0;i<name.length;i++){ h=(h*31+name.charCodeAt(i))>>>0; } return GROUP_COLORS[h%GROUP_COLORS.length]; }
+function groupColor(name){
+  if(state.groupColors && state.groupColors[name]!=null) return GROUP_COLORS[state.groupColors[name]%GROUP_COLORS.length];
+  let h=0; for(let i=0;i<name.length;i++){ h=(h*31+name.charCodeAt(i))>>>0; } return GROUP_COLORS[h%GROUP_COLORS.length];
+}
+function groupColorIndex(name){
+  if(state.groupColors && state.groupColors[name]!=null) return state.groupColors[name]%GROUP_COLORS.length;
+  let h=0; for(let i=0;i<name.length;i++){ h=(h*31+name.charCodeAt(i))>>>0; } return h%GROUP_COLORS.length;
+}
 // ===== Supabase config (same project as Daily Ritual) =====
 const SUPABASE_URL='https://qhcjddtxvktuowoaemnc.supabase.co';
 const SUPABASE_KEY='sb_publishable_tRpF5o9qWkIdAjwhPatp1A_igucPgGB';
@@ -468,7 +486,7 @@ let addingEntry=false, entryTagSel=[], addingPool=false, currentView='weave', di
 let groupFold={}; // groupName -> bool (collapsed)
 let selectMode=null; // null | 'today' | 'pool'
 let selectedIds=new Set();
-function fresh(){ return { tags:JSON.parse(JSON.stringify(DEFAULT_TAGS)), days:{}, pool:[], poolFold:false }; }
+function fresh(){ return { tags:JSON.parse(JSON.stringify(DEFAULT_TAGS)), days:{}, pool:[], poolFold:false, groupColors:{} }; }
 function migrate(s){
   if(!Array.isArray(s.tags)||!s.tags.length) s.tags=JSON.parse(JSON.stringify(DEFAULT_TAGS));
   if(!s.days) s.days={}; if(!Array.isArray(s.pool)) s.pool=[];
@@ -477,7 +495,8 @@ function migrate(s){
     if(typeof d.diary!=='string')d.diary=''; if(!d.mood)d.mood={m:null,n:null,e:null};
     if(typeof d.doneFold!=='boolean')d.doneFold=true; }
   s.pool.forEach(p=>{ if(!Array.isArray(p.tags))p.tags=[]; if(!('group'in p))p.group=null; });
-  if(typeof s.poolFold!=='boolean') s.poolFold=false; return s;
+  if(typeof s.poolFold!=='boolean') s.poolFold=false;
+  if(!s.groupColors||typeof s.groupColors!=='object') s.groupColors={}; return s;
 }
 // ===== cloud save (debounced + exponential backoff retry) =====
 let saveTimer=null, pendingSave=false, saving=false, failCount=0;
@@ -831,13 +850,29 @@ async function manageGroup(gname,ctx){
   const rerender=()=>{ ctx==='pool'?renderPool():renderEntries(); };
   const h=document.getElementById('dlghost'); h.innerHTML='';
   const ov=document.createElement('div'); ov.className='ov';
+  const curIdx=groupColorIndex(gname);
+  const swatches=GROUP_COLORS.map((c,i)=>`<span class="gsw" data-i="${i}" style="background:${c.line};${i===curIdx?'box-shadow:0 0 0 2px var(--paper),0 0 0 4px '+c.name:''}"></span>`).join('');
   ov.innerHTML=`<div class="dlg"><div class="dlg-t zh">组「${esc(gname)}」</div>
-    <input class="add-in zh" id="grename" value="${esc(gname)}" style="width:100%;border:1.5px solid var(--accent);border-radius:10px;padding:8px 12px;margin-bottom:18px">
-    <div class="dlg-act"><button class="dbtn cancel zh" id="gdel">解散组</button><button class="dbtn cancel zh">取消</button><button class="dbtn ok zh">改名</button></div></div>`;
+    <input class="add-in zh" id="grename" value="${esc(gname)}" style="width:100%;border:1.5px solid var(--accent);border-radius:10px;padding:8px 12px;margin-bottom:16px">
+    <div class="dlg-m zh" style="margin-bottom:9px">颜色</div>
+    <div class="gsw-grid">${swatches}</div>
+    <div class="dlg-act"><button class="dbtn cancel zh" id="gdel">解散组</button><button class="dbtn cancel zh">取消</button><button class="dbtn ok zh">保存</button></div></div>`;
   h.appendChild(ov);
   const close=()=>{h.innerHTML='';};
+  let chosen=curIdx;
+  ov.querySelectorAll('.gsw').forEach(s=>{ s.onclick=()=>{ chosen=parseInt(s.dataset.i);
+    ov.querySelectorAll('.gsw').forEach(x=>x.style.boxShadow='none');
+    s.style.boxShadow='0 0 0 2px var(--paper),0 0 0 4px '+GROUP_COLORS[chosen].name; }; });
   ov.querySelector('.cancel').onclick=close; ov.onclick=e=>{if(e.target===ov)close();};
-  ov.querySelector('.ok').onclick=()=>{ const v=ov.querySelector('#grename').value.trim(); if(v&&v!==gname){ arr.forEach(e=>{if(e.group===gname)e.group=v;}); const k=ctx+':'+gname; if(groupFold[k]!==undefined){groupFold[ctx+':'+v]=groupFold[k];delete groupFold[k];} save(); } close(); rerender(); };
+  ov.querySelector('.ok').onclick=()=>{ const v=ov.querySelector('#grename').value.trim();
+    if(!state.groupColors)state.groupColors={};
+    if(v&&v!==gname){ arr.forEach(e=>{if(e.group===gname)e.group=v;});
+      const k=ctx+':'+gname; if(groupFold[k]!==undefined){groupFold[ctx+':'+v]=groupFold[k];delete groupFold[k];}
+      // migrate color mapping to new name
+      if(state.groupColors[gname]!=null){ state.groupColors[v]=state.groupColors[gname]; delete state.groupColors[gname]; }
+      state.groupColors[v]=chosen; }
+    else { state.groupColors[gname]=chosen; }
+    save(); close(); rerender(); };
   ov.querySelector('#gdel').onclick=async()=>{ close(); const ok=await dialog({title:`解散组「${gname}」?`,msg:'组里的每一条记录都会<b>保留</b>，只是不再归在一起了。',ok:'解散',cancel:'取消'}); if(!ok)return; arr.forEach(e=>{if(e.group===gname)e.group=null;}); save(); rerender(); };
   setTimeout(()=>{const i=ov.querySelector('#grename');i.focus();i.select();},50);
 }
