@@ -178,6 +178,11 @@ body.dragging{ cursor:grabbing; user-select:none; }
 .echeck.on::after{ content:''; width:5px; height:8px; border:solid #fff; border-width:0 1.5px 1.5px 0; transform:rotate(45deg) translateY(-1px); }
 .emain{ flex:1; min-width:0; }
 .etext{ font-family:var(--zh); font-size:15px; color:var(--ink); word-break:break-word; cursor:text; }
+.etext-wrap{ display:flex; flex-direction:column; gap:2px; }
+.edetail{ font-family:var(--zh); font-size:13px; color:var(--ink-soft); word-break:break-word; cursor:text; padding-left:14px; position:relative; line-height:1.5; }
+.edetail::before{ content:'•'; position:absolute; left:2px; color:var(--ink-faint); }
+.entry.done .edetail{ color:var(--ink-faint); }
+.etext-edit{ font-family:var(--zh); font-size:15px; color:var(--ink); width:100%; border:none; border-bottom:1px solid var(--accent); background:transparent; outline:none; resize:none; overflow:hidden; line-height:1.5; padding:2px 0; }
 .etags{ display:flex; flex-wrap:wrap; gap:4px; margin-top:6px; }
 .tchip{ font-family:var(--zh); font-size:11px; padding:2px 9px; border-radius:999px; color:#fff; user-select:none; cursor:grab; touch-action:none; display:inline-flex; align-items:center; gap:0; }
 .tchip:active{ cursor:grabbing; }
@@ -851,12 +856,30 @@ function buildGroupAddRow(ctx, gname, groupItems, col){
   }
   return wrap;
 }
+// render an entry/pool text that may have multiple lines:
+// first line = main (click to edit), following lines = indented bullet details (plain text, no checkbox)
+function buildEntryText(item, kind){
+  const wrap=document.createElement('div'); wrap.className='etext-wrap';
+  const lines=(item.text||'').split('\n');
+  const first=lines[0]||'';
+  const details=lines.slice(1).filter(l=>l.trim()!=='');
+  const txt=document.createElement('div'); txt.className='etext zh';
+  if(kind==='pool') txt.style.color='var(--ink-soft)';
+  txt.textContent=first; txt.title='点击编辑';
+  txt.onclick=()=> kind==='pool' ? editPool(item.id) : editEntry(item.id);
+  wrap.appendChild(txt);
+  details.forEach(d=>{ const dl=document.createElement('div'); dl.className='edetail zh';
+    dl.textContent=d.replace(/^[•·\-]\s*/,''); // strip any leading bullet char, we add our own via CSS
+    dl.onclick=()=> kind==='pool' ? editPool(item.id) : editEntry(item.id);
+    wrap.appendChild(dl); });
+  return wrap;
+}
 function buildEntry(en,anim){ const row=document.createElement('div'); row.className='entry'+(anim?' adding':'')+(en.done?' done':''); row.dataset.id=en.id; row.dataset.kind='entry';
   if(selectMode==='today'){
     if(en.done){ const sp=document.createElement('div'); sp.className='sel-box disabled'; sp.title='已完成的不参与移动'; row.appendChild(sp); }
     else { const sb=document.createElement('div'); sb.className='sel-box'+(selectedIds.has(en.id)?' on':''); sb.onclick=()=>toggleSelect(en.id); row.appendChild(sb); }
     const main2=document.createElement('div'); main2.className='emain';
-    const txt2=document.createElement('div'); txt2.className='etext zh'+(en.done?' done-txt':''); txt2.textContent=en.text;
+    const txt2=document.createElement('div'); txt2.className='etext zh'+(en.done?' done-txt':''); txt2.textContent=(en.text||'').split('\n')[0];
     txt2.onclick=()=>{ if(!en.done)toggleSelect(en.id); }; main2.appendChild(txt2);
     if(en.tags&&en.tags.length)main2.appendChild(buildTagChips(en));
     row.appendChild(main2); return row;
@@ -864,7 +887,7 @@ function buildEntry(en,anim){ const row=document.createElement('div'); row.class
   const grip=document.createElement('div'); grip.className='grip'; grip.innerHTML='⋮⋮'; grip.title='拖动'; attachDrag(grip,'entry',en.id); row.appendChild(grip);
   const chk=document.createElement('div'); chk.className='echeck'+(en.done?' on':''); chk.title=en.done?'已完成':'点一下打勾'; chk.onclick=()=>toggleDone(en.id); row.appendChild(chk);
   const main=document.createElement('div'); main.className='emain';
-  const txt=document.createElement('div'); txt.className='etext zh'; txt.textContent=en.text; txt.title='点击编辑'; txt.onclick=()=>editEntry(en.id); main.appendChild(txt);
+  main.appendChild(buildEntryText(en, 'entry'));
   if(en.tags&&en.tags.length){main.appendChild(buildTagChips(en));}
   row.appendChild(main); const acts=document.createElement('div'); acts.className='eact';
   const mv=document.createElement('button'); mv.className='mbtn'; mv.innerHTML='↓'; mv.title='移到「以后」'; mv.onclick=()=>moveEntryToPool(en.id);
@@ -958,10 +981,34 @@ function moveGroupToToday(gname){ const moving=state.pool.filter(p=>p.group===gn
   save(); renderEntries(); renderPool(); renderViews();
   toast(`「${gname}」${moving.length}件 移到今天`,'撤销',()=>{ day.entries=snap.entries; state.pool=snap.pool; save(); renderEntries(); renderPool(); renderViews(); }); }
 function editEntry(id){ const day=getDay(viewDate); const en=day.entries.find(e=>e.id===id); if(!en)return;
-  const row=document.querySelector(`#entries .entry[data-id="${id}"]`); const main=row.querySelector('.emain'); const txt=main.querySelector('.etext');
-  const inp=document.createElement('input'); inp.className='add-in zh'; inp.value=en.text; inp.style.fontSize='15px'; main.insertBefore(inp,txt); txt.style.display='none';
-  const c=()=>{const v=inp.value.trim();if(v){en.text=v;save();}renderEntries();renderViews();};
-  inp.onkeydown=e=>{if(e.key==='Enter')c();else if(e.key==='Escape')renderEntries();}; inp.onblur=c; setTimeout(()=>{inp.focus();inp.select();},0); }
+  const row=document.querySelector(`#entries .entry[data-id="${id}"]`); const main=row.querySelector('.emain'); const wrap=main.querySelector('.etext-wrap');
+  const ta=makeEntryTextarea(en.text, (v)=>{ if(v.trim()){en.text=v;save();} renderEntries(); renderViews(); }, ()=>{ renderEntries(); });
+  main.insertBefore(ta,wrap); wrap.style.display='none';
+  setTimeout(()=>{ta.focus(); ta.selectionStart=ta.selectionEnd=ta.value.length; autoGrow(ta);},0); }
+// shared multi-line textarea with bullet auto-continuation for entry/pool detail唠叨
+function makeEntryTextarea(value, commit, cancel){
+  const ta=document.createElement('textarea'); ta.className='etext-edit zh'; ta.value=value||''; ta.rows=1;
+  let done=false;
+  const fin=()=>{ if(done)return; done=true; commit(ta.value.replace(/\n[•·\-]\s*$/,'').replace(/\s+$/,'')); };
+  ta.onkeydown=(e)=>{
+    if(e.key==='Enter'&&!e.shiftKey){
+      // bullet auto-continue: if current line already a bullet and empty -> exit bullet; else new bullet line
+      const pos=ta.selectionStart; const before=ta.value.slice(0,pos); const after=ta.value.slice(pos);
+      const curLine=before.split('\n').pop();
+      if(/^[•·\-]\s*$/.test(curLine)){ // empty bullet -> finish editing
+        e.preventDefault(); ta.value=ta.value.slice(0,pos-curLine.length)+after; fin(); return;
+      }
+      // otherwise insert a newline + bullet
+      e.preventDefault();
+      const ins='\n• '; ta.value=before+ins+after; ta.selectionStart=ta.selectionEnd=pos+ins.length; autoGrow(ta); return;
+    }
+    if(e.key==='Escape'){ done=true; cancel(); }
+  };
+  ta.oninput=()=>autoGrow(ta);
+  ta.onblur=fin;
+  return ta;
+}
+function autoGrow(ta){ ta.style.height='auto'; ta.style.height=ta.scrollHeight+'px'; }
 function renderAddZone(){ const z=document.getElementById('addzone'); z.innerHTML='';
   if(selectMode==='today'){ return; }
   if(!addingEntry){const b=document.createElement('button');b.className='add-trig zh';b.textContent='+  记一件事';b.onclick=()=>{addingEntry=true;entryTagSel=[];renderAddZone();};z.appendChild(b);return;}
@@ -1064,14 +1111,14 @@ function buildPool(p,anim){ const row=document.createElement('div'); row.classNa
   if(selectMode==='pool'){
     const sb=document.createElement('div'); sb.className='sel-box'+(selectedIds.has(p.id)?' on':''); sb.onclick=()=>toggleSelect(p.id); row.appendChild(sb);
     const main2=document.createElement('div'); main2.className='emain';
-    const txt2=document.createElement('div'); txt2.className='etext zh'; txt2.style.color='var(--ink-soft)'; txt2.textContent=p.text; txt2.onclick=()=>toggleSelect(p.id); main2.appendChild(txt2);
+    const txt2=document.createElement('div'); txt2.className='etext zh'; txt2.style.color='var(--ink-soft)'; txt2.textContent=(p.text||'').split('\n')[0]; txt2.onclick=()=>toggleSelect(p.id); main2.appendChild(txt2);
     if(p.tags&&p.tags.length)main2.appendChild(buildTagChips(p));
     row.appendChild(main2); return row;
   }
   const grip=document.createElement('div'); grip.className='grip'; grip.innerHTML='⋮⋮'; grip.title='拖动'; attachDrag(grip,'pool',p.id); row.appendChild(grip);
   const pk=document.createElement('div'); pk.className='pcheck'; pk.title='这天做了 → 移到「今天」'; pk.onclick=()=>pickPool(p.id); row.appendChild(pk);
   const main=document.createElement('div'); main.className='emain';
-  const txt=document.createElement('div'); txt.className='etext zh'; txt.style.color='var(--ink-soft)'; txt.textContent=p.text; txt.title='点击编辑'; txt.onclick=()=>editPool(p.id); main.appendChild(txt);
+  main.appendChild(buildEntryText(p, 'pool'));
   if(p.tags&&p.tags.length){main.appendChild(buildTagChips(p));}
   row.appendChild(main); const acts=document.createElement('div'); acts.className='eact';
   const mv=document.createElement('button'); mv.className='mbtn'; mv.innerHTML='↑'; mv.title='移到「今天」'; mv.onclick=()=>movePoolToToday(p.id);
@@ -1087,9 +1134,10 @@ function renderPoolAdd(){ const z=document.getElementById('pooladd'); z.innerHTM
   const go=document.createElement('button'); go.className='add-go'; go.innerHTML='↵'; row.appendChild(inp);row.appendChild(go);z.appendChild(row);
   const c=()=>{const v=inp.value.trim();if(v){const id='p'+Date.now();state.pool.push({id,text:v,tags:[]});save();addingPool=false;renderPool(id);}else{addingPool=false;renderPoolAdd();}};
   go.onclick=c;inp.onkeydown=e=>{if(e.key==='Enter')c();else if(e.key==='Escape'){addingPool=false;renderPoolAdd();}};setTimeout(()=>inp.focus(),0); }
-function editPool(id){ const p=state.pool.find(x=>x.id===id); if(!p)return; const row=document.querySelector(`#pool .entry[data-id="${id}"]`); const txt=row.querySelector('.etext');
-  const inp=document.createElement('input'); inp.className='add-in zh'; inp.value=p.text; row.querySelector('.emain').insertBefore(inp,txt); txt.style.display='none';
-  const c=()=>{const v=inp.value.trim();if(v){p.text=v;save();}renderPool();};inp.onkeydown=e=>{if(e.key==='Enter')c();else if(e.key==='Escape')renderPool();};inp.onblur=c;setTimeout(()=>{inp.focus();inp.select();},0); }
+function editPool(id){ const p=state.pool.find(x=>x.id===id); if(!p)return; const row=document.querySelector(`#pool .entry[data-id="${id}"]`); const wrap=row.querySelector('.etext-wrap');
+  const ta=makeEntryTextarea(p.text, (v)=>{ if(v.trim()){p.text=v;save();} renderPool(); }, ()=>{ renderPool(); });
+  row.querySelector('.emain').insertBefore(ta,wrap); wrap.style.display='none';
+  setTimeout(()=>{ta.focus(); ta.selectionStart=ta.selectionEnd=ta.value.length; autoGrow(ta);},0); }
 function retagPool(id,row){ const p=state.pool.find(x=>x.id===id); if(!p)return; const ex=row.querySelector('.tagpick.inline'); if(ex){ex.remove();return;}
   const pick=buildTagPicker([...(p.tags||[])],(sel)=>{p.tags=[...sel];save();refreshPoolInline(id);}); pick.classList.add('inline'); pick.style.width='100%'; row.querySelector('.emain').appendChild(pick); }
 function refreshPoolInline(id){ const p=state.pool.find(x=>x.id===id); if(!p)return; const row=document.querySelector(`#pool .entry[data-id="${id}"]`); if(!row)return; let tw=row.querySelector('.etags'); if(tw)tw.remove();
