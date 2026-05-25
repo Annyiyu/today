@@ -296,7 +296,7 @@ body.dragging{ cursor:grabbing; user-select:none; }
 .diary-head{ font-family:var(--hand); font-size:38px; color:var(--ink); position:relative; z-index:1; }
 .diary-sub{ font-family:var(--zh); font-size:12.5px; color:var(--ink-soft); margin-top:7px; margin-bottom:20px; position:relative; z-index:1; }
 .diary-area{ position:relative; z-index:1; width:100%; min-height:420px; border:none; background:transparent; outline:none;
-  resize:none; font-family:var(--zh); font-size:15px; line-height:32px; color:var(--ink);
+  resize:none; overflow:hidden; font-family:var(--zh); font-size:15px; line-height:32px; color:var(--ink);
   padding-top:5px;
   background-image:repeating-linear-gradient(transparent, transparent 31px, rgba(80,75,95,0.07) 32px);
   background-position:0 5px; }
@@ -1221,7 +1221,9 @@ function renderBatchBar(){
     exitSelectMode(); };
 }
 function renderDiary(){ const day=getDay(viewDate); const ta=document.getElementById('diary'); ta.value=day.diary||'';
-  ta.oninput=()=>{ day.diary=ta.value; if(diaryTimer)clearTimeout(diaryTimer); diaryTimer=setTimeout(()=>{save();const s=document.getElementById('dsaved');s.classList.add('show');setTimeout(()=>s.classList.remove('show'),1200);},500); };
+  const grow=()=>{ ta.style.height='auto'; ta.style.height=Math.max(ta.scrollHeight, 420)+'px'; };
+  ta.oninput=()=>{ day.diary=ta.value; grow(); if(diaryTimer)clearTimeout(diaryTimer); diaryTimer=setTimeout(()=>{save();const s=document.getElementById('dsaved');s.classList.add('show');setTimeout(()=>s.classList.remove('show'),1200);},500); };
+  setTimeout(grow,0);
   ta.onkeydown=(e)=>{
     if(e.key==='Tab'){
       e.preventDefault();
