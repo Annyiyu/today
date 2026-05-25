@@ -252,15 +252,11 @@ body.dragging{ cursor:grabbing; user-select:none; }
 .vtab{ font-family:var(--zh); font-size:12.5px; color:var(--ink-soft); cursor:pointer; padding:5px 13px; border-radius:999px; border:1px solid var(--line-strong); background:transparent; transition:all 0.18s; }
 .vtab.on{ background:var(--ink); color:var(--bg); border-color:var(--ink); }
 .vcard{ background:rgba(255,255,255,0.7); border:1px solid var(--line); border-radius:15px; padding:17px 16px 14px; }
-.weave-scroll{ overflow-x:auto; padding-bottom:5px; }
-.weave{ display:flex; gap:0; align-items:stretch; height:64px; border-radius:8px; overflow:hidden; }
-.wcol{ display:flex; flex-direction:column; width:11px; flex-shrink:0; cursor:pointer; transition:filter 0.15s; position:relative; }
-.wcol:hover{ filter:brightness(1.08) saturate(1.1); }
-.wcol.viewing::after{ content:''; position:absolute; inset:0; outline:2px solid var(--ink); outline-offset:-2px; border-radius:2px; pointer-events:none; }
-.wcol.today::after{ content:''; position:absolute; top:0; left:0; right:0; height:3px; background:var(--ink); opacity:0.55; }
-.wseg{ width:100%; }
-.wcol-empty{ width:11px; flex-shrink:0; cursor:pointer; align-self:stretch; display:flex; align-items:center; }
-.wcol-empty::before{ content:''; width:100%; height:2px; background:var(--line); }
+.weave-scroll{ overflow:hidden; padding-bottom:2px; }
+.weave-cloth{ display:flex; flex-direction:column; border-radius:10px; overflow:hidden; box-shadow:inset 0 0 0 1px rgba(80,75,95,0.04); }
+.weave-row{ height:13px; width:100%; }
+.weave-row + .weave-row{ margin-top:-2px; } /* slight overlap for soft vertical blend */
+.weave-empty{ font-family:var(--zh); font-size:12.5px; color:var(--ink-faint); text-align:center; padding:24px 10px; }
 .vcap{ font-family:var(--zh); font-size:11.5px; color:var(--ink-soft); margin-top:12px; text-align:center; }
 .river{ display:flex; flex-direction:column; gap:3px; }
 .river-row{ display:flex; align-items:center; gap:8px; }
@@ -1151,36 +1147,55 @@ function renderDiary(){ const day=getDay(viewDate); const ta=document.getElement
   };
 }
 function renderViews(){ if(currentView==='weave')renderWeave(); else if(currentView==='ring')renderRing(); else renderRiver(); }
+function hexToHsl(hex){ // returns [h,s,l]
+  let r=0,g=0,b=0; hex=hex.replace('#','');
+  if(hex.length===3){ r=parseInt(hex[0]+hex[0],16); g=parseInt(hex[1]+hex[1],16); b=parseInt(hex[2]+hex[2],16); }
+  else { r=parseInt(hex.slice(0,2),16); g=parseInt(hex.slice(2,4),16); b=parseInt(hex.slice(4,6),16); }
+  r/=255;g/=255;b/=255; const mx=Math.max(r,g,b),mn=Math.min(r,g,b); let h=0,s=0,l=(mx+mn)/2;
+  if(mx!==mn){ const dd=mx-mn; s=l>0.5?dd/(2-mx-mn):dd/(mx+mn);
+    if(mx===r)h=(g-b)/dd+(g<b?6:0); else if(mx===g)h=(b-r)/dd+2; else h=(r-g)/dd+4; h/=6; }
+  return [h*360,s,l];
+}
 function renderWeave(){ const box=document.getElementById('weave'); box.innerHTML='';
   const today=new Date(); today.setHours(0,0,0,0); const MAXDAYS=180;
   let firstWithData=null;
-  for(let i=MAXDAYS-1;i>=0;i--){ const d=new Date(today); d.setDate(today.getDate()-i); const k=keyOf(d); const day=state.days[k]; if(day&&day.entries.length>0){ firstWithData=i; break; } }
-  const span = firstWithData==null ? 14 : firstWithData;
+  for(let i=MAXDAYS-1;i>=0;i--){ const d=new Date(today); d.setDate(today.getDate()-i); const day=state.days[keyOf(d)]; if(day&&day.entries.length>0){ firstWithData=i; break; } }
+  const wcap=document.getElementById('wcap');
+  if(firstWithData==null){ box.innerHTML='<div class="weave-empty zh">记几天，这里会织出一块你生活的布</div>'; wcap.textContent=''; return; }
+  const span=Math.min(firstWithData, 60); // show up to ~60 days of cloth
   const start=new Date(today); start.setDate(today.getDate()-span);
-  let maxUnits=1;
-  for(let i=0;i<=span;i++){ const d=new Date(start); d.setDate(start.getDate()+i); const day=state.days[keyOf(d)];
-    if(day&&day.entries.length){ let u=0; day.entries.forEach(en=>{ u += Math.max(1,(en.tags||[]).length); }); if(u>maxUnits)maxUnits=u; } }
-  for(let i=0;i<=span;i++){ const d=new Date(start); d.setDate(start.getDate()+i); const k=keyOf(d); const day=state.days[k];
-    if(day&&day.entries.length>0){
-      const col=document.createElement('div'); col.className='wcol'+(k===todayKey()?' today':'')+(k===viewDate?' viewing':''); col.title=k+' · '+day.entries.length+'件'; col.onclick=()=>{viewDate=k;switchDay();};
-      const bands=[];
-      day.entries.forEach(en=>{ const tags=(en.tags||[]);
-        if(tags.length===0){ bands.push('var(--ink-faint)'); }
-        else tags.forEach(t=>{ const tg=tagById(t); bands.push(tg?tg.raw:'var(--ink-faint)'); });
-      });
-      const dens=Math.min(1,bands.length/maxUnits);
-      const op=0.42+0.58*dens;
-      bands.forEach((c,bi)=>{ const seg=document.createElement('div'); seg.className='wseg';
-        seg.style.flex='1'; seg.style.background=c; seg.style.opacity=op; if(bi>0)seg.style.marginTop='-1px';
-        col.appendChild(seg); });
-      box.appendChild(col);
-    } else {
-      const e=document.createElement('div'); e.className='wcol-empty'+(k===viewDate?' viewing':''); e.title=k+' · —'; e.onclick=()=>{viewDate=k;switchDay();}; box.appendChild(e);
-    }
-  }
-  box.scrollLeft=box.scrollWidth;
+  const N=span+1; // number of day-columns
+  // collect per-day per-tag weight
+  const dayKeys=[]; for(let i=0;i<N;i++){ const d=new Date(start); d.setDate(start.getDate()+i); dayKeys.push(keyOf(d)); }
+  const used={}; // tagId -> array(N) of weights
+  dayKeys.forEach((k,di)=>{ const day=state.days[k]; if(!day)return; (day.entries||[]).forEach(en=>{ (en.tags||[]).forEach(t=>{ if(!used[t])used[t]=new Array(N).fill(0); used[t][di]+=1; }); }); });
+  const tagIds=Object.keys(used);
+  if(tagIds.length===0){ box.innerHTML='<div class="weave-empty zh">给记录打点标签，布就会有颜色</div>'; wcap.textContent=''; return; }
+  // sort rows by hue (so neighbouring rows blend harmoniously)
+  tagIds.sort((a,b)=>{ const ta=tagById(a),tb=tagById(b); if(!ta||!tb)return 0; return hexToHsl(ta.raw)[0]-hexToHsl(tb.raw)[0]; });
+  // normalize weights for opacity
+  let maxW=1; tagIds.forEach(t=>used[t].forEach(w=>{ if(w>maxW)maxW=w; }));
+  // build the cloth: a stack of rows; each row = horizontal gradient of its tag color with alpha flowing over days
+  const cloth=document.createElement('div'); cloth.className='weave-cloth';
+  cloth.style.gridTemplateColumns=`repeat(${N}, 1fr)`;
+  tagIds.forEach(tid=>{ const tg=tagById(tid); if(!tg)return;
+    const row=document.createElement('div'); row.className='weave-row';
+    // horizontal gradient stops by day
+    const stops=used[tid].map((w,di)=>{ const a = w===0 ? 0 : (0.25 + 0.75*Math.min(1,w/maxW)); const p=(di/(N-1||1)*100).toFixed(1);
+      return `${hexToRgba(tg.raw,a)} ${p}%`; }).join(', ');
+    row.style.background=`linear-gradient(90deg, ${stops})`;
+    row.title=tg.label;
+    cloth.appendChild(row);
+  });
+  box.appendChild(cloth);
+  // soft vertical blend between rows via a subtle blur overlay handled in CSS (mix-blend) — kept simple here
   const w=Object.values(state.days).filter(d=>d.entries&&d.entries.length>0).length;
-  document.getElementById('wcap').textContent=w>0?`已经织进 ${w} 天的颜色`:'记几天，这里会织出你生活的颜色'; }
+  wcap.textContent=`已经织进 ${w} 天 · ${tagIds.length} 种颜色`;
+}
+function hexToRgba(hex,a){ hex=hex.replace('#',''); let r,g,b;
+  if(hex.length===3){ r=parseInt(hex[0]+hex[0],16); g=parseInt(hex[1]+hex[1],16); b=parseInt(hex[2]+hex[2],16); }
+  else { r=parseInt(hex.slice(0,2),16); g=parseInt(hex.slice(2,4),16); b=parseInt(hex.slice(4,6),16); }
+  return `rgba(${r},${g},${b},${a})`; }
 let ringLegendOpen=false;
 function renderRing(){ const counts={}; let tagTotal=0; let entryCount=0; const today=new Date(); today.setHours(0,0,0,0); const start=new Date(today); start.setDate(today.getDate()-29);
   for(const k in state.days){ const d=parseKey(k); if(d>=start&&d<=today){(state.days[k].entries||[]).forEach(en=>{ entryCount++; (en.tags||[]).forEach(t=>{counts[t]=(counts[t]||0)+1;tagTotal++;});});} }
