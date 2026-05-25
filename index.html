@@ -179,9 +179,12 @@ body.dragging{ cursor:grabbing; user-select:none; }
 .emain{ flex:1; min-width:0; }
 .etext{ font-family:var(--zh); font-size:15px; color:var(--ink); word-break:break-word; cursor:text; }
 .etags{ display:flex; flex-wrap:wrap; gap:4px; margin-top:6px; }
-.tchip{ font-family:var(--zh); font-size:11px; padding:2px 9px; border-radius:999px; color:#fff; user-select:none; cursor:grab; touch-action:none; }
+.tchip{ font-family:var(--zh); font-size:11px; padding:2px 9px; border-radius:999px; color:#fff; user-select:none; cursor:grab; touch-action:none; display:inline-flex; align-items:center; gap:0; }
 .tchip:active{ cursor:grabbing; }
 .tchip.chip-src{ opacity:0.3; }
+.tchip-x{ display:inline-flex; align-items:center; justify-content:center; width:0; overflow:hidden; opacity:0; font-size:13px; line-height:1; cursor:pointer; transition:width 0.15s, opacity 0.15s, margin 0.15s; margin-left:0; }
+.tchip:hover .tchip-x{ width:13px; opacity:0.8; margin-left:4px; margin-right:-2px; }
+.tchip-x:hover{ opacity:1; }
 .topt{ cursor:grab; }
 .topt.chip-src{ opacity:0.3; }
 .chip-drop{ display:inline-block; width:2px; height:16px; background:var(--accent); border-radius:2px; vertical-align:middle; margin:0 1px; animation:fadeIn 0.15s; }
@@ -332,6 +335,7 @@ body.dragging{ cursor:grabbing; user-select:none; }
 
 @media (max-width:760px){
   body{ padding:24px 12px 80px; }
+  .tchip-x{ width:13px; opacity:0.7; margin-left:4px; margin-right:-2px; }
   .book{ flex-direction:column; }
   .page-left{ border-right:none; border-bottom:1px solid var(--spine); }
   .brand{ font-size:32px; }
@@ -739,11 +743,19 @@ function makeChipReorder(chipEl, id, container, getArr, setArr, onClick, rerende
   };
   chipEl.addEventListener('mousedown',start); chipEl.addEventListener('touchstart',start,{passive:false});
 }
-// build the displayed tag-chip row for an entry/pool item; chips are reorderable (drag) — no click action
+// build the displayed tag-chip row for an entry/pool item; chips are reorderable (drag) + hover × to remove from this item
 function buildTagChips(item){
   const tw=document.createElement('div'); tw.className='etags';
   (item.tags||[]).forEach(tid=>{ const t=tagById(tid); if(!t)return;
-    const c=document.createElement('span'); c.className='tchip'; c.dataset.chipId=tid; c.style.background=t.raw; c.textContent=t.label; c.title='拖动调整顺序';
+    const c=document.createElement('span'); c.className='tchip'; c.dataset.chipId=tid; c.style.background=t.raw; c.title='拖动调整顺序';
+    const lbl=document.createElement('span'); lbl.className='tchip-label'; lbl.textContent=t.label; c.appendChild(lbl);
+    const rm=document.createElement('span'); rm.className='tchip-x'; rm.innerHTML='×'; rm.title='从这条移除';
+    const removeTag=(e)=>{ e.stopPropagation(); e.preventDefault();
+      item.tags=(item.tags||[]).filter(x=>x!==tid); save(); renderEntries(); renderPool(); };
+    rm.addEventListener('click', removeTag);
+    rm.addEventListener('mousedown', e=>e.stopPropagation()); // don't start a drag
+    rm.addEventListener('touchstart', e=>e.stopPropagation(), {passive:true});
+    c.appendChild(rm);
     makeChipReorder(c, tid, tw,
       ()=>item.tags,
       (newOrder)=>{ item.tags=newOrder; save(); },
