@@ -200,15 +200,17 @@ body.dragging{ cursor:grabbing; user-select:none; }
 .done-wrap{ display:flex; flex-direction:column; gap:6px; margin-top:4px; }
 
 /* group cluster */
-.group-cluster{ margin:6px 0; border-left:2px solid var(--line-strong); padding-left:9px; border-radius:2px; }
-.group-head{ display:flex; align-items:center; gap:6px; padding:4px 2px 7px; cursor:pointer; user-select:none; }
-.group-head .gcaret{ font-size:10px; color:var(--ink-faint); }
-.group-head .gname{ font-size:13px; color:var(--ink-soft); font-weight:500; }
-.group-head .gcount{ font-family:var(--display); font-size:10.5px; font-weight:600; color:#fff; background:var(--ink-faint); border-radius:999px; padding:0 6px; }
-.group-head .gedit{ margin-left:auto; color:var(--ink-faint); cursor:pointer; font-size:15px; padding:0 6px; opacity:0; transition:opacity 0.18s; }
-.group-cluster:hover .gedit{ opacity:0.7; }
-.group-head .gedit:hover{ opacity:1; color:var(--accent-deep); }
+.group-cluster{ margin:10px 0; border-left:3px solid var(--line-strong); padding:4px 10px 8px 11px; border-radius:10px; transition:background 0.2s; }
+.group-head{ display:flex; align-items:center; gap:6px; padding:5px 2px 8px; cursor:pointer; user-select:none; }
+.group-head .gcaret{ font-size:10px; }
+.group-head .gname{ font-size:13.5px; font-weight:600; letter-spacing:0.01em; }
+.group-head .gcount{ font-family:var(--display); font-size:10.5px; font-weight:600; color:#fff; border-radius:999px; padding:0 7px; }
+.group-head .gmove{ margin-left:auto; cursor:pointer; font-size:13px; padding:0 5px; opacity:0; transition:opacity 0.18s; font-weight:700; }
+.group-head .gedit{ cursor:pointer; font-size:15px; padding:0 5px; opacity:0; transition:opacity 0.18s; }
+.group-cluster:hover .gedit, .group-cluster:hover .gmove{ opacity:0.7; }
+.group-head .gedit:hover, .group-head .gmove:hover{ opacity:1 !important; }
 .group-body{ display:flex; flex-direction:column; gap:6px; }
+.group-cluster .entry{ background:rgba(255,255,255,0.55); }
 
 .gpick-opt{ font-family:var(--zh); font-size:12px; padding:4px 11px; border-radius:999px; cursor:pointer; border:1.5px solid var(--line-strong); color:var(--ink-soft); background:transparent; transition:all 0.15s; }
 .gpick-opt:hover{ border-color:var(--accent); color:var(--accent-deep); }
@@ -444,6 +446,18 @@ function moodColor(v){
   }
   return 'rgb(168,205,208)';
 }
+// curated soft macaron palette for group containers
+const GROUP_COLORS=[
+  {tint:'rgba(244,166,160,0.13)', line:'#ef9d97', name:'#c96f68'},
+  {tint:'rgba(148,184,224,0.14)', line:'#8fb3e0', name:'#5f86b8'},
+  {tint:'rgba(168,211,160,0.15)', line:'#a0cf98', name:'#6f9e68'},
+  {tint:'rgba(242,160,196,0.13)', line:'#f0a0c4', name:'#c06d92'},
+  {tint:'rgba(197,168,232,0.14)', line:'#c5a8e8', name:'#8a6fb8'},
+  {tint:'rgba(240,207,110,0.17)', line:'#ecc860', name:'#b0902f'},
+  {tint:'rgba(143,208,212,0.15)', line:'#8fd0d4', name:'#5f9ea2'},
+  {tint:'rgba(242,157,131,0.13)', line:'#f29d83', name:'#c06d53'},
+];
+function groupColor(name){ let h=0; for(let i=0;i<name.length;i++){ h=(h*31+name.charCodeAt(i))>>>0; } return GROUP_COLORS[h%GROUP_COLORS.length]; }
 // ===== Supabase config (same project as Daily Ritual) =====
 const SUPABASE_URL='https://qhcjddtxvktuowoaemnc.supabase.co';
 const SUPABASE_KEY='sb_publishable_tRpF5o9qWkIdAjwhPatp1A_igucPgGB';
@@ -637,14 +651,19 @@ function updateDropIndicator(x,y){
 function commitDrop(){
   const di=drag.dropInfo; const day=getDay(viewDate);
   if(di.type==='group-reorder'){
-    const arr=day.entries; const moving=arr.filter(e=>e.group===drag.id); const rest=arr.filter(e=>e.group!==drag.id);
+    // detect which array this group lives in
+    const inPool = state.pool.some(p=>p.group===drag.id);
+    const arr = inPool ? state.pool : day.entries;
+    const moving=arr.filter(e=>e.group===drag.id); const rest=arr.filter(e=>e.group!==drag.id);
     let insertAt=rest.length;
     if(di.beforeGroup){ insertAt=rest.findIndex(e=>e.group===di.beforeGroup); if(insertAt<0)insertAt=rest.length; }
-    day.entries=[...rest.slice(0,insertAt),...moving,...rest.slice(insertAt)]; save(); return;
+    const merged=[...rest.slice(0,insertAt),...moving,...rest.slice(insertAt)];
+    if(inPool) state.pool=merged; else day.entries=merged;
+    save(); return;
   }
   if(di.type==='to-pool'){
     if(drag.kind==='entry'){ const idx=day.entries.findIndex(e=>e.id===drag.id); if(idx<0)return; const [m]=day.entries.splice(idx,1);
-      const np={id:'p'+Date.now(),text:m.text,tags:m.tags||[],group:null}; state.pool.splice(di.index,0,np); save(); toast('挪到「以后」啦'); }
+      const np={id:'p'+Date.now(),text:m.text,tags:m.tags||[],group:m.group||null}; state.pool.splice(di.index,0,np); save(); toast('挪到「以后」啦'); }
     else if(drag.kind==='pool'){ const from=state.pool.findIndex(p=>p.id===drag.id); if(from<0)return; const [m]=state.pool.splice(from,1);
       let to=di.index; if(from<to)to--; state.pool.splice(to,0,m); save(); }
     return;
@@ -714,38 +733,47 @@ function renderEntries(animId){ const box=document.getElementById('entries'); co
   const open=day.entries.filter(e=>!e.done);
   const done=day.entries.filter(e=>e.done);
   // --- open entries, clustered by group ---
-  renderClustered(box, open, animId);
+  renderClustered(box, open, animId, 'today');
   // --- done section (folded) ---
   if(done.length>0){
     const foldRow=document.createElement('div'); foldRow.className='done-fold'+(day.doneFold?'':' open');
     foldRow.innerHTML=`<span class="caret">▸</span> 已完成 (${done.length})`;
     foldRow.onclick=()=>{ day.doneFold=!day.doneFold; save(); renderEntries(); };
     box.appendChild(foldRow);
-    if(!day.doneFold){ const dwrap=document.createElement('div'); dwrap.className='done-wrap'; renderClustered(dwrap, done, animId); box.appendChild(dwrap); }
+    if(!day.doneFold){ const dwrap=document.createElement('div'); dwrap.className='done-wrap'; renderClustered(dwrap, done, animId, 'today'); box.appendChild(dwrap); }
   }
   renderAddZone();
 }
-// render a set of entries, grouping those with .group into labeled clusters
-function renderClustered(container, list, animId){
+// render a set of items, grouping those with .group into labeled colorful clusters
+// ctx: 'today' | 'pool'
+function renderClustered(container, list, animId, ctx){
+  ctx=ctx||'today';
+  const buildItem = ctx==='pool' ? (it)=>buildPool(it,it.id===animId) : (en)=>buildEntry(en,en.id===animId);
   const ungrouped=list.filter(e=>!e.group);
   const groups={}; const groupOrder=[];
   list.filter(e=>e.group).forEach(e=>{ if(!groups[e.group]){groups[e.group]=[];groupOrder.push(e.group);} groups[e.group].push(e); });
-  ungrouped.forEach(en=>container.appendChild(buildEntry(en,en.id===animId)));
+  ungrouped.forEach(it=>container.appendChild(buildItem(it)));
   groupOrder.forEach(gname=>{
-    const cluster=document.createElement('div'); cluster.className='group-cluster'; cluster.dataset.group=gname;
+    const col=groupColor(gname);
+    const cluster=document.createElement('div'); cluster.className='group-cluster'; cluster.dataset.group=gname; cluster.dataset.ctx=ctx;
+    cluster.style.background=col.tint; cluster.style.borderLeftColor=col.line;
     const head=document.createElement('div'); head.className='group-head';
-    const folded=groupFold[gname];
-    const ggrip=document.createElement('span'); ggrip.className='ggrip'; ggrip.innerHTML='⋮⋮'; ggrip.title='拖动整组'; attachDrag(ggrip,'group',gname); head.appendChild(ggrip);
-    const caret=document.createElement('span'); caret.className='gcaret'; caret.textContent=folded?'▸':'▾'; head.appendChild(caret);
-    const nm=document.createElement('span'); nm.className='gname zh'; nm.textContent=gname; head.appendChild(nm);
-    const cnt=document.createElement('span'); cnt.className='gcount'; cnt.textContent=groups[gname].length; head.appendChild(cnt);
-    head.onclick=(e)=>{ if(e.target.closest('.gedit')||e.target.closest('.ggrip'))return; groupFold[gname]=!groupFold[gname]; renderEntries(); };
-    const edit=document.createElement('span'); edit.className='gedit'; edit.innerHTML='⋯'; edit.title='重命名 / 删除组';
-    edit.onclick=(e)=>{ e.stopPropagation(); manageGroup(gname); };
+    const folded=groupFold[ctx+':'+gname];
+    const ggrip=document.createElement('span'); ggrip.className='ggrip'; ggrip.innerHTML='⋮⋮'; ggrip.title='拖动整组'; ggrip.style.color=col.line; attachDrag(ggrip,'group',gname); head.appendChild(ggrip);
+    const caret=document.createElement('span'); caret.className='gcaret'; caret.textContent=folded?'▸':'▾'; caret.style.color=col.name; head.appendChild(caret);
+    const nm=document.createElement('span'); nm.className='gname zh'; nm.textContent=gname; nm.style.color=col.name; head.appendChild(nm);
+    const cnt=document.createElement('span'); cnt.className='gcount'; cnt.textContent=groups[gname].length; cnt.style.background=col.line; head.appendChild(cnt);
+    head.onclick=(e)=>{ if(e.target.closest('.gedit')||e.target.closest('.ggrip')||e.target.closest('.gmove'))return; groupFold[ctx+':'+gname]=!groupFold[ctx+':'+gname]; ctx==='pool'?renderPool():renderEntries(); };
+    // move whole group across sections
+    const gmove=document.createElement('span'); gmove.className='gmove'; gmove.innerHTML=ctx==='today'?'↓':'↑'; gmove.title=ctx==='today'?'整组移到「以后」':'整组移到「今天」'; gmove.style.color=col.name;
+    gmove.onclick=(e)=>{ e.stopPropagation(); ctx==='today'?moveGroupToPool(gname):moveGroupToToday(gname); };
+    head.appendChild(gmove);
+    const edit=document.createElement('span'); edit.className='gedit'; edit.innerHTML='⋯'; edit.title='重命名 / 解散组'; edit.style.color=col.name;
+    edit.onclick=(e)=>{ e.stopPropagation(); manageGroup(gname,ctx); };
     head.appendChild(edit);
     cluster.appendChild(head);
     if(!folded){ const body=document.createElement('div'); body.className='group-body';
-      groups[gname].forEach(en=>body.appendChild(buildEntry(en,en.id===animId))); cluster.appendChild(body); }
+      groups[gname].forEach(it=>body.appendChild(buildItem(it))); cluster.appendChild(body); }
     container.appendChild(cluster);
   });
 }
@@ -771,13 +799,18 @@ function buildEntry(en,anim){ const row=document.createElement('div'); row.class
   const dl=document.createElement('button'); dl.className='mbtn'; dl.innerHTML='×'; dl.title='删除'; dl.onclick=()=>removeEntry(en.id);
   acts.appendChild(mv);acts.appendChild(gp);acts.appendChild(tg);acts.appendChild(dl);row.appendChild(acts); return row; }
 function toggleDone(id){ const day=getDay(viewDate); const en=day.entries.find(e=>e.id===id); if(!en)return; en.done=!en.done; save(); renderEntries(); }
-// existing groups across this day (for quick-pick)
-function existingGroups(){ const day=getDay(viewDate); const set=[]; day.entries.forEach(e=>{ if(e.group&&!set.includes(e.group))set.push(e.group); }); return set; }
-function assignGroup(id){
-  const day=getDay(viewDate); const en=day.entries.find(e=>e.id===id); if(!en)return;
+// existing group names in a given context
+function existingGroupsIn(ctx){ const set=[]; const arr=ctx==='pool'?state.pool:getDay(viewDate).entries; arr.forEach(e=>{ if(e.group&&!set.includes(e.group))set.push(e.group); }); return set; }
+function existingGroups(){ return existingGroupsIn('today'); }
+function assignGroup(id){ assignGroupCtx(id,'today'); }
+function assignGroupPool(id){ assignGroupCtx(id,'pool'); }
+function assignGroupCtx(id,ctx){
+  const arr=ctx==='pool'?state.pool:getDay(viewDate).entries;
+  const en=arr.find(e=>e.id===id); if(!en)return;
+  const rerender=()=>{ ctx==='pool'?renderPool():renderEntries(); };
   const h=document.getElementById('dlghost'); h.innerHTML='';
   const ov=document.createElement('div'); ov.className='ov';
-  const groups=existingGroups();
+  const groups=existingGroupsIn(ctx);
   const chips=groups.map(g=>`<span class="gpick-opt zh" data-g="${esc(g)}" style="${en.group===g?'background:var(--accent);color:#fff;border-color:var(--accent)':''}">${esc(g)}</span>`).join('');
   ov.innerHTML=`<div class="dlg"><div class="dlg-t zh">归到一组</div>
     <div class="dlg-m zh" style="margin-bottom:12px">把「${esc(en.text)}」放进一个组里，方便把一系列的事看在一起。</div>
@@ -786,13 +819,16 @@ function assignGroup(id){
     <div class="dlg-act">${en.group?'<button class="dbtn cancel zh" id="gpremove">移出组</button>':''}<button class="dbtn cancel zh">取消</button><button class="dbtn ok zh">确定</button></div></div>`;
   h.appendChild(ov);
   const close=()=>{h.innerHTML='';};
-  ov.querySelectorAll('.gpick-opt').forEach(c=>{ c.onclick=()=>{ en.group=c.dataset.g; save(); close(); renderEntries(); }; });
-  if(ov.querySelector('#gpremove')) ov.querySelector('#gpremove').onclick=()=>{ en.group=null; save(); close(); renderEntries(); };
+  ov.querySelectorAll('.gpick-opt').forEach(c=>{ c.onclick=()=>{ en.group=c.dataset.g; save(); close(); rerender(); }; });
+  if(ov.querySelector('#gpremove')) ov.querySelector('#gpremove').onclick=()=>{ en.group=null; save(); close(); rerender(); };
   ov.querySelector('.cancel').onclick=close; ov.onclick=e=>{if(e.target===ov)close();};
-  ov.querySelector('.ok').onclick=()=>{ const v=ov.querySelector('#gpname').value.trim(); if(v){en.group=v;save();} close(); renderEntries(); };
+  ov.querySelector('.ok').onclick=()=>{ const v=ov.querySelector('#gpname').value.trim(); if(v){en.group=v;save();} close(); rerender(); };
   setTimeout(()=>ov.querySelector('#gpname').focus(),50);
 }
-async function manageGroup(gname){
+async function manageGroup(gname,ctx){
+  ctx=ctx||'today';
+  const arr=ctx==='pool'?state.pool:getDay(viewDate).entries;
+  const rerender=()=>{ ctx==='pool'?renderPool():renderEntries(); };
   const h=document.getElementById('dlghost'); h.innerHTML='';
   const ov=document.createElement('div'); ov.className='ov';
   ov.innerHTML=`<div class="dlg"><div class="dlg-t zh">组「${esc(gname)}」</div>
@@ -800,12 +836,26 @@ async function manageGroup(gname){
     <div class="dlg-act"><button class="dbtn cancel zh" id="gdel">解散组</button><button class="dbtn cancel zh">取消</button><button class="dbtn ok zh">改名</button></div></div>`;
   h.appendChild(ov);
   const close=()=>{h.innerHTML='';};
-  const day=getDay(viewDate);
   ov.querySelector('.cancel').onclick=close; ov.onclick=e=>{if(e.target===ov)close();};
-  ov.querySelector('.ok').onclick=()=>{ const v=ov.querySelector('#grename').value.trim(); if(v&&v!==gname){ day.entries.forEach(e=>{if(e.group===gname)e.group=v;}); if(groupFold[gname]!==undefined){groupFold[v]=groupFold[gname];delete groupFold[gname];} save(); } close(); renderEntries(); };
-  ov.querySelector('#gdel').onclick=async()=>{ close(); const ok=await dialog({title:`解散组「${gname}」?`,msg:'组里的每一条记录都会<b>保留</b>，只是不再归在一起了。',ok:'解散',cancel:'取消'}); if(!ok)return; day.entries.forEach(e=>{if(e.group===gname)e.group=null;}); save(); renderEntries(); };
+  ov.querySelector('.ok').onclick=()=>{ const v=ov.querySelector('#grename').value.trim(); if(v&&v!==gname){ arr.forEach(e=>{if(e.group===gname)e.group=v;}); const k=ctx+':'+gname; if(groupFold[k]!==undefined){groupFold[ctx+':'+v]=groupFold[k];delete groupFold[k];} save(); } close(); rerender(); };
+  ov.querySelector('#gdel').onclick=async()=>{ close(); const ok=await dialog({title:`解散组「${gname}」?`,msg:'组里的每一条记录都会<b>保留</b>，只是不再归在一起了。',ok:'解散',cancel:'取消'}); if(!ok)return; arr.forEach(e=>{if(e.group===gname)e.group=null;}); save(); rerender(); };
   setTimeout(()=>{const i=ov.querySelector('#grename');i.focus();i.select();},50);
 }
+// move a whole group across sections (preserve group name; only open items move from today)
+function moveGroupToPool(gname){ const day=getDay(viewDate); const moving=day.entries.filter(e=>e.group===gname&&!e.done); if(moving.length===0){toast('这组没有可移动的事');return;}
+  const snap=JSON.parse(JSON.stringify({entries:day.entries,pool:state.pool}));
+  moving.forEach(e=>{ state.pool.push({id:'p'+Date.now()+Math.random().toString(36).slice(2,5),text:e.text,tags:[...(e.tags||[])],group:gname}); });
+  day.entries=day.entries.filter(e=>!(e.group===gname&&!e.done));
+  if(state.poolFold) state.poolFold=false;
+  save(); renderEntries(); renderPool(); renderViews();
+  toast(`「${gname}」${moving.length}件 移到以后`,'撤销',()=>{ day.entries=snap.entries; state.pool=snap.pool; save(); renderEntries(); renderPool(); renderViews(); }); }
+function moveGroupToToday(gname){ const moving=state.pool.filter(p=>p.group===gname); if(moving.length===0)return;
+  const snap=JSON.parse(JSON.stringify({entries:getDay(viewDate).entries,pool:state.pool}));
+  const day=getDay(viewDate);
+  moving.forEach(p=>{ day.entries.push({id:'e'+Date.now()+Math.random().toString(36).slice(2,5),text:p.text,tags:[...(p.tags||[])],group:gname,done:false}); });
+  state.pool=state.pool.filter(p=>p.group!==gname);
+  save(); renderEntries(); renderPool(); renderViews();
+  toast(`「${gname}」${moving.length}件 移到今天`,'撤销',()=>{ day.entries=snap.entries; state.pool=snap.pool; save(); renderEntries(); renderPool(); renderViews(); }); }
 function editEntry(id){ const day=getDay(viewDate); const en=day.entries.find(e=>e.id===id); if(!en)return;
   const row=document.querySelector(`#entries .entry[data-id="${id}"]`); const main=row.querySelector('.emain'); const txt=main.querySelector('.etext');
   const inp=document.createElement('input'); inp.className='add-in zh'; inp.value=en.text; inp.style.fontSize='15px'; main.insertBefore(inp,txt); txt.style.display='none';
@@ -907,7 +957,7 @@ function renderPool(animId){ const box=document.getElementById('pool'); box.inne
   if(note) note.textContent='心之所向 · 来日方长';
   if(addZone) addZone.style.display='';
   if(state.pool.length===0&&!addingPool){ /* 空着就纯留白 */ }
-  state.pool.forEach(p=>box.appendChild(buildPool(p,p.id===animId))); renderPoolAdd(); }
+  renderClustered(box, state.pool, animId, 'pool'); renderPoolAdd(); }
 function togglePoolFold(){ state.poolFold=!state.poolFold; save(); renderPool(); }
 function buildPool(p,anim){ const row=document.createElement('div'); row.className='entry'+(anim?' adding':''); row.dataset.id=p.id; row.dataset.kind='pool'; row.style.background='transparent'; row.style.borderStyle='dashed';
   if(selectMode==='pool'){
@@ -924,9 +974,10 @@ function buildPool(p,anim){ const row=document.createElement('div'); row.classNa
   if(p.tags&&p.tags.length){main.appendChild(buildTagChips(p));}
   row.appendChild(main); const acts=document.createElement('div'); acts.className='eact';
   const mv=document.createElement('button'); mv.className='mbtn'; mv.innerHTML='↑'; mv.title='移到「今天」'; mv.onclick=()=>movePoolToToday(p.id);
+  const gp=document.createElement('button'); gp.className='mbtn'; gp.innerHTML='❏'; gp.title='归到一组'; gp.onclick=()=>assignGroupPool(p.id);
   const tg=document.createElement('button'); tg.className='mbtn'; tg.innerHTML='⊕'; tg.onclick=()=>retagPool(p.id,row);
   const dl=document.createElement('button'); dl.className='mbtn'; dl.innerHTML='×'; dl.onclick=()=>removePool(p.id);
-  acts.appendChild(mv);acts.appendChild(tg);acts.appendChild(dl);row.appendChild(acts); return row; }
+  acts.appendChild(mv);acts.appendChild(gp);acts.appendChild(tg);acts.appendChild(dl);row.appendChild(acts); return row; }
 function renderPoolAdd(){ const z=document.getElementById('pooladd'); z.innerHTML='';
   if(selectMode==='pool'){ return; }
   if(!addingPool){const b=document.createElement('button');b.className='add-trig zh';b.textContent='+  接住一个念头';b.onclick=()=>{addingPool=true;renderPoolAdd();};z.appendChild(b);return;}
@@ -954,16 +1005,16 @@ function removePool(id){ const idx=state.pool.findIndex(x=>x.id===id); if(idx<0)
 // ===== move between 今天 <-> 以后 =====
 function moveEntryToPool(id){ const day=getDay(viewDate); const idx=day.entries.findIndex(e=>e.id===id); if(idx<0)return;
   const e=day.entries[idx]; day.entries.splice(idx,1);
-  state.pool.push({id:'p'+Date.now(),text:e.text,tags:[...(e.tags||[])],group:null}); // 清除done/group
+  state.pool.push({id:'p'+Date.now(),text:e.text,tags:[...(e.tags||[])],group:e.group||null}); // 保留分组、清除done
   if(state.poolFold){ state.poolFold=false; } // 展开以后让用户看到
   save(); renderEntries(); renderPool(); renderViews(); toast('移到「以后」啦'); }
 function movePoolToToday(id){ const idx=state.pool.findIndex(p=>p.id===id); if(idx<0)return;
   const p=state.pool[idx]; state.pool.splice(idx,1);
-  getDay(viewDate).entries.push({id:'e'+Date.now(),text:p.text,tags:[...(p.tags||[])],group:null,done:false}); // 不自动勾
+  getDay(viewDate).entries.push({id:'e'+Date.now(),text:p.text,tags:[...(p.tags||[])],group:p.group||null,done:false}); // 保留分组、不自动勾
   save(); renderEntries(); renderPool(); renderViews(); toast(isToday()?'移到今天啦':'移过去啦'); }
 function moveAllToPool(){ const day=getDay(viewDate); const open=day.entries.filter(e=>!e.done); if(open.length===0){toast('没有可移动的事');return;}
   const snap=JSON.parse(JSON.stringify({entries:day.entries,pool:state.pool}));
-  open.forEach(e=>{ state.pool.push({id:'p'+Date.now()+Math.random().toString(36).slice(2,5),text:e.text,tags:[...(e.tags||[])],group:null}); });
+  open.forEach(e=>{ state.pool.push({id:'p'+Date.now()+Math.random().toString(36).slice(2,5),text:e.text,tags:[...(e.tags||[])],group:e.group||null}); });
   day.entries=day.entries.filter(e=>e.done); // 只留下已完成的
   if(state.poolFold) state.poolFold=false;
   save(); renderEntries(); renderPool(); renderViews();
@@ -971,14 +1022,14 @@ function moveAllToPool(){ const day=getDay(viewDate); const open=day.entries.fil
 function moveAllToToday(){ if(state.pool.length===0){toast('「以后」是空的');return;}
   const snap=JSON.parse(JSON.stringify({entries:getDay(viewDate).entries,pool:state.pool}));
   const day=getDay(viewDate); const n=state.pool.length;
-  state.pool.forEach(p=>{ day.entries.push({id:'e'+Date.now()+Math.random().toString(36).slice(2,5),text:p.text,tags:[...(p.tags||[])],group:null,done:false}); });
+  state.pool.forEach(p=>{ day.entries.push({id:'e'+Date.now()+Math.random().toString(36).slice(2,5),text:p.text,tags:[...(p.tags||[])],group:p.group||null,done:false}); });
   state.pool=[];
   save(); renderEntries(); renderPool(); renderViews();
   toast(`${n} 件移到今天`,'撤销',()=>{ day.entries=snap.entries; state.pool=snap.pool; save(); renderEntries(); renderPool(); renderViews(); }); }
 // move a specific set of ids
 function moveEntriesToPool(ids){ const day=getDay(viewDate); const moving=day.entries.filter(e=>ids.includes(e.id)&&!e.done); if(moving.length===0)return;
   const snap=JSON.parse(JSON.stringify({entries:day.entries,pool:state.pool}));
-  moving.forEach(e=>{ state.pool.push({id:'p'+Date.now()+Math.random().toString(36).slice(2,5),text:e.text,tags:[...(e.tags||[])],group:null}); });
+  moving.forEach(e=>{ state.pool.push({id:'p'+Date.now()+Math.random().toString(36).slice(2,5),text:e.text,tags:[...(e.tags||[])],group:e.group||null}); });
   day.entries=day.entries.filter(e=>!(ids.includes(e.id)&&!e.done));
   if(state.poolFold) state.poolFold=false;
   save(); renderEntries(); renderPool(); renderViews();
@@ -986,7 +1037,7 @@ function moveEntriesToPool(ids){ const day=getDay(viewDate); const moving=day.en
 function movePoolItemsToToday(ids){ const moving=state.pool.filter(p=>ids.includes(p.id)); if(moving.length===0)return;
   const snap=JSON.parse(JSON.stringify({entries:getDay(viewDate).entries,pool:state.pool}));
   const day=getDay(viewDate);
-  moving.forEach(p=>{ day.entries.push({id:'e'+Date.now()+Math.random().toString(36).slice(2,5),text:p.text,tags:[...(p.tags||[])],group:null,done:false}); });
+  moving.forEach(p=>{ day.entries.push({id:'e'+Date.now()+Math.random().toString(36).slice(2,5),text:p.text,tags:[...(p.tags||[])],group:p.group||null,done:false}); });
   state.pool=state.pool.filter(p=>!ids.includes(p.id));
   save(); renderEntries(); renderPool(); renderViews();
   toast(`${moving.length} 件移到今天`,'撤销',()=>{ day.entries=snap.entries; state.pool=snap.pool; save(); renderEntries(); renderPool(); renderViews(); }); }
