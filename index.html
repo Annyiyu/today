@@ -1220,10 +1220,15 @@ function renderBatchBar(){
     if(selectMode==='today') moveEntriesToPool(ids); else movePoolItemsToToday(ids);
     exitSelectMode(); };
 }
+function growDiary(){ const ta=document.getElementById('diary'); if(!ta)return;
+  ta.style.height='auto';
+  // scrollHeight rounds to line; add small buffer so the last line never clips into a scrollbar
+  ta.style.height=(Math.max(ta.scrollHeight,420)+4)+'px';
+}
 function renderDiary(){ const day=getDay(viewDate); const ta=document.getElementById('diary'); ta.value=day.diary||'';
-  const grow=()=>{ ta.style.height='auto'; ta.style.height=Math.max(ta.scrollHeight, 420)+'px'; };
-  ta.oninput=()=>{ day.diary=ta.value; grow(); if(diaryTimer)clearTimeout(diaryTimer); diaryTimer=setTimeout(()=>{save();const s=document.getElementById('dsaved');s.classList.add('show');setTimeout(()=>s.classList.remove('show'),1200);},500); };
-  setTimeout(grow,0);
+  ta.oninput=()=>{ day.diary=ta.value; growDiary(); if(diaryTimer)clearTimeout(diaryTimer); diaryTimer=setTimeout(()=>{save();const s=document.getElementById('dsaved');s.classList.add('show');setTimeout(()=>s.classList.remove('show'),1200);},500); };
+  requestAnimationFrame(growDiary);
+  setTimeout(growDiary, 120);
   ta.onkeydown=(e)=>{
     if(e.key==='Tab'){
       e.preventDefault();
@@ -1448,6 +1453,7 @@ async function init(){
   const sbtn=document.getElementById('signin-btn'); if(sbtn) sbtn.onclick=signIn;
   const sobtn=document.getElementById('signout'); if(sobtn) sobtn.onclick=signOut;
 }
+window.addEventListener('resize', ()=>{ growDiary(); });
 init();
 </script>
 </body>
