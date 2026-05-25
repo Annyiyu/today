@@ -692,7 +692,7 @@ function commitDrop(){
   }
   if(di.type==='to-pool'){
     if(drag.kind==='entry'){ const idx=day.entries.findIndex(e=>e.id===drag.id); if(idx<0)return; const [m]=day.entries.splice(idx,1);
-      const np={id:'p'+Date.now(),text:m.text,tags:m.tags||[],group:m.group||null}; state.pool.splice(di.index,0,np); save(); toast('挪到「以后」啦'); }
+      const np={id:'p'+Date.now(),text:m.text,tags:m.tags||[],group:m.group||null}; state.pool.splice(di.index,0,np); save(); toast('移到「以后」了'); }
     else if(drag.kind==='pool'){ const from=state.pool.findIndex(p=>p.id===drag.id); if(from<0)return; const [m]=state.pool.splice(from,1);
       let to=di.index; if(from<to)to--; state.pool.splice(to,0,m); save(); }
     return;
@@ -700,7 +700,7 @@ function commitDrop(){
   if(di.type==='to-today'){
     if(drag.kind==='pool'){ const from=state.pool.findIndex(p=>p.id===drag.id); if(from<0)return; const [m]=state.pool.splice(from,1);
       const ne={id:'e'+Date.now(),text:m.text,tags:m.tags||[],group:di.group,done:false};
-      insertEntryAt(day,ne,di.beforeId); save(); toast(isToday()?'挪到今天啦':'挪过去啦'); }
+      insertEntryAt(day,ne,di.beforeId); save(); toast(isToday()?'移到「今天」了':'移过去了'); }
     else if(drag.kind==='entry'){ const idx=day.entries.findIndex(e=>e.id===drag.id); if(idx<0)return; const [m]=day.entries.splice(idx,1);
       m.group=di.group; insertEntryAt(day,m,di.beforeId); save(); }
     return;
@@ -887,7 +887,7 @@ function assignGroupCtx(id,ctx){
   const groups=existingGroupsIn(ctx);
   const chips=groups.map(g=>`<span class="gpick-opt zh" data-g="${esc(g)}" style="${en.group===g?'background:var(--accent);color:#fff;border-color:var(--accent)':''}">${esc(g)}</span>`).join('');
   ov.innerHTML=`<div class="dlg"><div class="dlg-t zh">归到一组</div>
-    <div class="dlg-m zh" style="margin-bottom:12px">把「${esc(en.text)}」放进一个组里，方便把一系列的事看在一起。</div>
+    <div class="dlg-m zh" style="margin-bottom:12px">把「${esc(en.text)}」放进一个组里，方便把一系列的事情放在一起看。</div>
     ${groups.length?`<div style="display:flex;flex-wrap:wrap;gap:6px;margin-bottom:14px">${chips}</div>`:''}
     <input class="add-in zh" id="gpname" placeholder="新建一个组…（如：回国准备）" style="width:100%;border:1.5px solid var(--accent);border-radius:10px;padding:8px 12px;margin-bottom:18px">
     <div class="dlg-act">${en.group?'<button class="dbtn cancel zh" id="gpremove">移出组</button>':''}<button class="dbtn cancel zh">取消</button><button class="dbtn ok zh">确定</button></div></div>`;
@@ -1069,7 +1069,7 @@ function buildPool(p,anim){ const row=document.createElement('div'); row.classNa
     row.appendChild(main2); return row;
   }
   const grip=document.createElement('div'); grip.className='grip'; grip.innerHTML='⋮⋮'; grip.title='拖动'; attachDrag(grip,'pool',p.id); row.appendChild(grip);
-  const pk=document.createElement('div'); pk.className='pcheck'; pk.title='这天做了 → 挪到上面'; pk.onclick=()=>pickPool(p.id); row.appendChild(pk);
+  const pk=document.createElement('div'); pk.className='pcheck'; pk.title='这天做了 → 移到「今天」'; pk.onclick=()=>pickPool(p.id); row.appendChild(pk);
   const main=document.createElement('div'); main.className='emain';
   const txt=document.createElement('div'); txt.className='etext zh'; txt.style.color='var(--ink-soft)'; txt.textContent=p.text; txt.title='点击编辑'; txt.onclick=()=>editPool(p.id); main.appendChild(txt);
   if(p.tags&&p.tags.length){main.appendChild(buildTagChips(p));}
@@ -1108,11 +1108,11 @@ function moveEntryToPool(id){ const day=getDay(viewDate); const idx=day.entries.
   const e=day.entries[idx]; day.entries.splice(idx,1);
   state.pool.push({id:'p'+Date.now(),text:e.text,tags:[...(e.tags||[])],group:e.group||null}); // 保留分组、清除done
   if(state.poolFold){ state.poolFold=false; } // 展开以后让用户看到
-  save(); renderEntries(); renderPool(); renderViews(); toast('移到「以后」啦'); }
+  save(); renderEntries(); renderPool(); renderViews(); toast('移到「以后」了'); }
 function movePoolToToday(id){ const idx=state.pool.findIndex(p=>p.id===id); if(idx<0)return;
   const p=state.pool[idx]; state.pool.splice(idx,1);
   getDay(viewDate).entries.push({id:'e'+Date.now(),text:p.text,tags:[...(p.tags||[])],group:p.group||null,done:false}); // 保留分组、不自动勾
-  save(); renderEntries(); renderPool(); renderViews(); toast(isToday()?'移到今天啦':'移过去啦'); }
+  save(); renderEntries(); renderPool(); renderViews(); toast(isToday()?'移到「今天」了':'移过去了'); }
 function moveAllToPool(){ const day=getDay(viewDate); const open=day.entries.filter(e=>!e.done); if(open.length===0){toast('没有可移动的事');return;}
   const snap=JSON.parse(JSON.stringify({entries:day.entries,pool:state.pool}));
   open.forEach(e=>{ state.pool.push({id:'p'+Date.now()+Math.random().toString(36).slice(2,5),text:e.text,tags:[...(e.tags||[])],group:e.group||null}); });
