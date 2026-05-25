@@ -253,9 +253,9 @@ body.dragging{ cursor:grabbing; user-select:none; }
 .vtab.on{ background:var(--ink); color:var(--bg); border-color:var(--ink); }
 .vcard{ background:rgba(255,255,255,0.7); border:1px solid var(--line); border-radius:15px; padding:17px 16px 14px; }
 .weave-scroll{ overflow:hidden; padding-bottom:2px; }
-.weave-cloth{ display:flex; flex-direction:column; border-radius:10px; overflow:hidden; box-shadow:inset 0 0 0 1px rgba(80,75,95,0.04); padding:2px 0; background:rgba(255,255,255,0.25); }
-.weave-row{ height:18px; width:100%; }
-.weave-row + .weave-row{ margin-top:-6px; }
+.weave-cloth{ display:flex; flex-direction:column; gap:2px; border-radius:8px; padding:3px; background:rgba(255,255,255,0.3); }
+.weave-row{ display:flex; gap:2px; height:16px; width:100%; }
+.weave-cell{ flex:1; border-radius:2px; transition:opacity 0.15s; }
 .weave-empty{ font-family:var(--zh); font-size:12.5px; color:var(--ink-faint); text-align:center; padding:24px 10px; }
 .vcap{ font-family:var(--zh); font-size:11.5px; color:var(--ink-soft); margin-top:12px; text-align:center; }
 .river{ display:flex; flex-direction:column; gap:3px; }
@@ -263,6 +263,7 @@ body.dragging{ cursor:grabbing; user-select:none; }
 .river-lab{ font-family:var(--zh); font-size:11px; color:var(--ink-soft); width:18px; flex-shrink:0; }
 .river-bar{ flex:1; height:15px; border-radius:8px; overflow:hidden; }
 .ringwrap{ display:flex; align-items:flex-start; gap:20px; }
+.ringwrap.legend-collapsed{ align-items:center; }
 .ringwrap #ringsvg{ flex-shrink:0; }
 .rlegend{ flex:1; padding-top:4px; display:flex; flex-direction:column; gap:6px; }
 .litem{ display:flex; align-items:center; gap:7px; font-family:var(--zh); font-size:12px; color:var(--ink-soft); }
@@ -1175,22 +1176,19 @@ function renderWeave(){ const box=document.getElementById('weave'); box.innerHTM
   tagIds.sort((a,b)=>{ const ta=tagById(a),tb=tagById(b); if(!ta||!tb)return 0; return hexToHsl(ta.raw)[0]-hexToHsl(tb.raw)[0]; });
   // normalize weights for opacity
   let maxW=1; tagIds.forEach(t=>used[t].forEach(w=>{ if(w>maxW)maxW=w; }));
-  // build the cloth: a stack of rows; each row = horizontal gradient of its tag color with alpha flowing over days
+  // build the cloth: rows = tags; each row is N discrete day-cells (crisp horizontally = woven knots)
   const cloth=document.createElement('div'); cloth.className='weave-cloth';
-  cloth.style.gridTemplateColumns=`repeat(${N}, 1fr)`;
   tagIds.forEach((tid,ri)=>{ const tg=tagById(tid); if(!tg)return;
     const row=document.createElement('div'); row.className='weave-row';
-    const stops=used[tid].map((w,di)=>{ let a=0;
-        if(w>0){ const norm=Math.min(1,w/maxW); a = 0.16 + 0.82*Math.pow(norm,0.7); }
-        const p=(di/(N-1||1)*100).toFixed(1); return `${hexToRgba(tg.raw,a)} ${p}%`; }).join(', ');
-    row.style.background=`linear-gradient(90deg, ${stops})`;
-    row.style.webkitMaskImage='linear-gradient(180deg, rgba(0,0,0,0.5) 0%, rgba(0,0,0,1) 40%, rgba(0,0,0,1) 60%, rgba(0,0,0,0.5) 100%)';
-    row.style.maskImage='linear-gradient(180deg, rgba(0,0,0,0.5) 0%, rgba(0,0,0,1) 40%, rgba(0,0,0,1) 60%, rgba(0,0,0,0.5) 100%)';
+    used[tid].forEach((w,di)=>{ const cell=document.createElement('div'); cell.className='weave-cell';
+      let a=0; if(w>0){ const norm=Math.min(1,w/maxW); a=0.22+0.78*Math.pow(norm,0.75); }
+      cell.style.background=w>0?hexToRgba(tg.raw,a):'transparent';
+      row.appendChild(cell);
+    });
     row.title=tg.label;
     cloth.appendChild(row);
   });
   box.appendChild(cloth);
-  // soft vertical blend between rows via a subtle blur overlay handled in CSS (mix-blend) — kept simple here
   const w=Object.values(state.days).filter(d=>d.entries&&d.entries.length>0).length;
   wcap.textContent=`已经织进 ${w} 天 · ${tagIds.length} 种颜色`;
 }
@@ -1228,6 +1226,8 @@ function renderRing(){ const counts={}; let tagTotal=0; let entryCount=0; const 
   svgBox.addEventListener('click',e=>{ if(!e.target.classList.contains('ring-arc')) deactivate(); });
   // collapsible legend
   lg.innerHTML='';
+  // when collapsed, vertically center the legend toggle against the ring; when expanded, top-align
+  const ringwrap=lg.closest('.ringwrap'); if(ringwrap) ringwrap.classList.toggle('legend-collapsed', !ringLegendOpen);
   const toggle=document.createElement('button'); toggle.className='leg-toggle zh'+(ringLegendOpen?' open':'');
   toggle.innerHTML=`<span class="caret">▸</span> 明细（${ranked.length}）`;
   toggle.onclick=()=>{ ringLegendOpen=!ringLegendOpen; renderRing(); };
