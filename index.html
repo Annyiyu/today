@@ -944,10 +944,17 @@ async function manageGroup(gname,ctx){
   ov.querySelector('.cancel').onclick=close; ov.onclick=e=>{if(e.target===ov)close();};
   ov.querySelector('.ok').onclick=()=>{ const v=ov.querySelector('#grename').value.trim();
     if(!state.groupColors)state.groupColors={};
-    if(v&&v!==gname){ arr.forEach(e=>{if(e.group===gname)e.group=v;});
-      const k=ctx+':'+gname; if(groupFold[k]!==undefined){groupFold[ctx+':'+v]=groupFold[k];delete groupFold[k];}
+    if(v&&v!==gname){
+      // 改名 = 全局：同一个组换个叫法，所有天 + 以后池子里同名的，一起改
+      let n=0;
+      for(const dk in state.days){ (state.days[dk].entries||[]).forEach(e=>{ if(e.group===gname){e.group=v;n++;} }); }
+      (state.pool||[]).forEach(e=>{ if(e.group===gname){e.group=v;n++;} });
+      // fold 状态迁移（今天/以后两个 ctx 都迁）
+      ['today','pool'].forEach(cx=>{ const k=cx+':'+gname; if(groupFold[k]!==undefined){groupFold[cx+':'+v]=groupFold[k];delete groupFold[k];} });
+      // 颜色映射迁移
       if(state.groupColors[gname]!=null){ state.groupColors[v]=state.groupColors[gname]; delete state.groupColors[gname]; }
-      state.groupColors[v]=chosen; }
+      state.groupColors[v]=chosen;
+    }
     else { state.groupColors[gname]=chosen; }
     save(); close(); rerender(); };
   ov.querySelector('#gdissolve').onclick=async()=>{ close(); const ok=await dialog({title:`解散组「${gname}」?`,msg:'组里的每一条记录都会<b>保留</b>，只是不再归在一起了。',ok:'解散',cancel:'取消'}); if(!ok)return; arr.forEach(e=>{if(e.group===gname)e.group=null;}); save(); rerender(); };
