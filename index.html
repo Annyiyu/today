@@ -100,6 +100,16 @@ body {
 .cal-foot{ margin-top:10px; text-align:center; }
 .cal-today-btn{ font-family:var(--zh); font-size:11.5px; color:var(--accent-deep); cursor:pointer; padding:4px 12px; border-radius:999px; transition:background 0.15s; }
 .cal-today-btn:hover{ background:#fdeef2; }
+/* move-to-day picker (reuses .cal-* below) */
+.mv-pop{ width:280px; }
+.mv-title{ font-family:var(--zh); font-size:13px; color:var(--ink-soft); margin-bottom:10px; letter-spacing:0.02em; }
+.mv-quick{ display:flex; gap:6px; margin-bottom:8px; }
+.mv-q{ flex:1; text-align:center; font-family:var(--zh); font-size:13px; color:var(--ink); background:rgba(80,75,95,0.05); border-radius:9px; padding:7px 0; cursor:pointer; transition:all 0.15s; }
+.mv-q:hover{ background:#fdeef2; color:var(--accent-deep); }
+.mv-q.now{ color:var(--accent-deep); font-weight:600; }
+.mv-pool{ font-family:var(--zh); font-size:12.5px; color:var(--ink-soft); cursor:pointer; padding:6px 8px; border-radius:9px; transition:all 0.15s; }
+.mv-pool:hover{ background:#fdeef2; color:var(--accent-deep); }
+.mv-div{ height:1px; background:var(--line); margin:10px 0; }
 .dlabel .wd{ font-family:var(--zh); font-size:12.5px; color:var(--ink-soft); font-weight:400; margin-left:6px; }
 .dlabel .rel{ display:inline-block; font-family:var(--display); font-size:9.5px; font-weight:600; letter-spacing:0.06em;
   text-transform:uppercase; color:#fff; background:var(--accent); border-radius:999px; padding:1px 7px; margin-left:7px; vertical-align:middle; }
@@ -914,11 +924,12 @@ function buildEntry(en,anim){ const row=document.createElement('div'); row.class
   main.appendChild(buildEntryText(en, 'entry'));
   if(en.tags&&en.tags.length){main.appendChild(buildTagChips(en));}
   row.appendChild(main); const acts=document.createElement('div'); acts.className='eact';
-  const mv=document.createElement('button'); mv.className='mbtn'; mv.innerHTML='↓'; mv.title='移到「以后」'; mv.onclick=()=>moveEntryToPool(en.id);
+  const cp=document.createElement('button'); cp.className='mbtn'; cp.innerHTML=ICON_COPY; cp.title='复制一条'; cp.onclick=()=>copyEntry(en.id);
+  const mv=document.createElement('button'); mv.className='mbtn'; mv.innerHTML='↪'; mv.title='移到…'; mv.onclick=()=>openMovePicker(en.id,'today',mv);
   const gp=document.createElement('button'); gp.className='mbtn'; gp.innerHTML='❏'; gp.title='归到一组'; gp.onclick=()=>assignGroup(en.id);
   const tg=document.createElement('button'); tg.className='mbtn'; tg.innerHTML='⊕'; tg.title='标签'; tg.onclick=()=>retag(en.id,row);
   const dl=document.createElement('button'); dl.className='mbtn'; dl.innerHTML='×'; dl.title='删除'; dl.onclick=()=>removeEntry(en.id);
-  acts.appendChild(mv);acts.appendChild(gp);acts.appendChild(tg);acts.appendChild(dl);row.appendChild(acts); return row; }
+  acts.appendChild(cp);acts.appendChild(mv);acts.appendChild(gp);acts.appendChild(tg);acts.appendChild(dl);row.appendChild(acts); return row; }
 function toggleDone(id){ const day=getDay(viewDate); const en=day.entries.find(e=>e.id===id); if(!en)return; en.done=!en.done; save(); renderEntries(); }
 // existing group names in a given context
 function existingGroupsIn(ctx){ const set=[]; const arr=ctx==='pool'?state.pool:getDay(viewDate).entries; arr.forEach(e=>{ if(e.group&&!set.includes(e.group))set.push(e.group); }); return set; }
@@ -1152,11 +1163,12 @@ function buildPool(p,anim){ const row=document.createElement('div'); row.classNa
   main.appendChild(buildEntryText(p, 'pool'));
   if(p.tags&&p.tags.length){main.appendChild(buildTagChips(p));}
   row.appendChild(main); const acts=document.createElement('div'); acts.className='eact';
-  const mv=document.createElement('button'); mv.className='mbtn'; mv.innerHTML='↑'; mv.title='移到「今天」'; mv.onclick=()=>movePoolToToday(p.id);
+  const cp=document.createElement('button'); cp.className='mbtn'; cp.innerHTML=ICON_COPY; cp.title='复制一条'; cp.onclick=()=>copyPool(p.id);
+  const mv=document.createElement('button'); mv.className='mbtn'; mv.innerHTML='↪'; mv.title='移到…'; mv.onclick=()=>openMovePicker(p.id,'pool',mv);
   const gp=document.createElement('button'); gp.className='mbtn'; gp.innerHTML='❏'; gp.title='归到一组'; gp.onclick=()=>assignGroupPool(p.id);
   const tg=document.createElement('button'); tg.className='mbtn'; tg.innerHTML='⊕'; tg.onclick=()=>retagPool(p.id,row);
   const dl=document.createElement('button'); dl.className='mbtn'; dl.innerHTML='×'; dl.onclick=()=>removePool(p.id);
-  acts.appendChild(mv);acts.appendChild(gp);acts.appendChild(tg);acts.appendChild(dl);row.appendChild(acts); return row; }
+  acts.appendChild(cp);acts.appendChild(mv);acts.appendChild(gp);acts.appendChild(tg);acts.appendChild(dl);row.appendChild(acts); return row; }
 function renderPoolAdd(){ const z=document.getElementById('pooladd'); z.innerHTML='';
   if(selectMode==='pool'){ return; }
   if(!addingPool){const b=document.createElement('button');b.className='add-trig zh';b.textContent='+  接住一个念头';b.onclick=()=>{addingPool=true;renderPoolAdd();};z.appendChild(b);return;}
@@ -1192,6 +1204,60 @@ function movePoolToToday(id){ const idx=state.pool.findIndex(p=>p.id===id); if(i
   const p=state.pool[idx]; state.pool.splice(idx,1);
   getDay(viewDate).entries.push({id:'e'+Date.now(),text:p.text,tags:[...(p.tags||[])],group:p.group||null,done:false}); // 保留分组、不自动勾
   save(); renderEntries(); renderPool(); renderViews(); toast(isToday()?'移到「今天」了':'移过去了'); }
+// ===== 复制一条（就地、瞬间、永远未完成；id 带随机后缀防手抖撞车） =====
+const ICON_COPY='<svg width="13" height="13" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round" style="display:block"><rect x="9" y="9" width="11" height="11" rx="2.5"/><path d="M5 15H4a2 2 0 0 1-2-2V4a2 2 0 0 1 2-2h9a2 2 0 0 1 2 2v1"/></svg>';
+function copyEntry(id){ const day=getDay(viewDate); const i=day.entries.findIndex(e=>e.id===id); if(i<0)return;
+  const s=day.entries[i]; const c={id:'e'+Date.now()+Math.random().toString(36).slice(2,5),text:s.text,tags:[...(s.tags||[])],group:s.group||null,done:false};
+  day.entries.splice(i+1,0,c); save(); renderEntries(c.id); }
+function copyPool(id){ const i=state.pool.findIndex(p=>p.id===id); if(i<0)return;
+  const s=state.pool[i]; const c={id:'p'+Date.now()+Math.random().toString(36).slice(2,5),text:s.text,tags:[...(s.tags||[])],group:s.group||null};
+  state.pool.splice(i+1,0,c); save(); renderPool(c.id); }
+// ===== 移到某天（含昨天/今天/明天快捷 + 日历；以后是另一个目的地） =====
+function dayLabel(k){ const tk=todayKey(); if(k===tk)return'今天';
+  const d=parseKey(k),diff=Math.round((parseKey(tk)-d)/86400000);
+  if(diff===1)return'昨天'; if(diff===-1)return'明天'; return(d.getMonth()+1)+'月'+d.getDate()+'日'; }
+// done 规则：移到今天/未来 → 重置为未完成(重新激活)；移到过去 → 保留原状(过去只该有 finished)
+function moveItemToDay(id, ctx, key){
+  const tk=todayKey();
+  const snap={days:JSON.parse(JSON.stringify(state.days)), pool:JSON.parse(JSON.stringify(state.pool))};
+  let moved=null;
+  if(ctx==='pool'){ const i=state.pool.findIndex(p=>p.id===id); if(i<0)return;
+    const s=state.pool[i]; moved={id:s.id,text:s.text,tags:[...(s.tags||[])],group:s.group||null,done:false}; state.pool.splice(i,1); }
+  else { const day=getDay(viewDate); const i=day.entries.findIndex(e=>e.id===id); if(i<0)return;
+    const s=day.entries[i]; const done=(key<tk)?!!s.done:false;
+    moved={id:s.id,text:s.text,tags:[...(s.tags||[])],group:s.group||null,done}; day.entries.splice(i,1); }
+  if(!moved)return;
+  getDay(key).entries.unshift(moved); // 落目标天顶部，组自动归回
+  save(); renderEntries(); renderPool(); renderViews();
+  toast(`移到「${dayLabel(key)}」`,'撤销',()=>{ state.days=snap.days; state.pool=snap.pool; save(); renderEntries(); renderPool(); renderViews(); }); }
+function openMovePicker(id, ctx, anchorEl){
+  const h=document.getElementById('pickhost'); h.innerHTML='';
+  const tk=todayKey(); const base=parseKey(tk); let pm={y:base.getFullYear(),m:base.getMonth()};
+  const pop=document.createElement('div'); pop.className='cal-pop mv-pop';
+  const dk=(off)=>{ const d=new Date(base); d.setDate(base.getDate()+off); return keyOf(d); };
+  const pick=(key)=>{ h.innerHTML=''; moveItemToDay(id,ctx,key); };
+  const toPool=()=>{ h.innerHTML=''; moveEntryToPool(id); };
+  function draw(){ const {y,m}=pm; const first=new Date(y,m,1); const startDow=(first.getDay()+6)%7; const dim=new Date(y,m+1,0).getDate();
+    const mn=['1月','2月','3月','4月','5月','6月','7月','8月','9月','10月','11月','12月'];
+    let html=`<div class="mv-title zh">移到…</div><div class="mv-quick">`
+      +`<span class="mv-q zh" data-k="${dk(-1)}">昨天</span><span class="mv-q zh now" data-k="${dk(0)}">今天</span><span class="mv-q zh" data-k="${dk(1)}">明天</span></div>`;
+    if(ctx!=='pool') html+=`<div class="mv-pool zh" data-pool="1">↘ 收进「以后」</div>`;
+    html+=`<div class="mv-div"></div><div class="cal-head"><span class="cal-nav" data-d="-1">‹</span><span class="cal-title">${y} 年 ${mn[m]}</span><span class="cal-nav" data-d="1">›</span></div><div class="cal-grid">`;
+    ['一','二','三','四','五','六','日'].forEach(w=>html+=`<div class="cal-wd">${w}</div>`);
+    for(let i=0;i<startDow;i++) html+=`<div class="cal-cell empty"></div>`;
+    for(let d=1;d<=dim;d++){ const k=`${y}-${pad(m+1)}-${pad(d)}`; const has=state.days[k]&&state.days[k].entries&&state.days[k].entries.length>0;
+      html+=`<div class="cal-cell${k===tk?' today':''}" data-k="${k}">${d}${has?'<span class="cal-dot"></span>':''}</div>`; }
+    html+=`</div>`; pop.innerHTML=html;
+    pop.querySelectorAll('.mv-q').forEach(q=>q.onclick=()=>pick(q.dataset.k));
+    const mp=pop.querySelector('.mv-pool'); if(mp)mp.onclick=toPool;
+    pop.querySelectorAll('.cal-nav').forEach(n=>n.onclick=()=>{ pm.m+=parseInt(n.dataset.d); if(pm.m<0){pm.m=11;pm.y--;} if(pm.m>11){pm.m=0;pm.y++;} draw(); });
+    pop.querySelectorAll('.cal-cell[data-k]').forEach(c=>c.onclick=()=>pick(c.dataset.k)); }
+  draw(); h.appendChild(pop);
+  const a=anchorEl.getBoundingClientRect(); let top=a.bottom+8, left=a.left+a.width/2-140;
+  if(left<12)left=12; if(left+280>window.innerWidth-12)left=window.innerWidth-292;
+  if(top+360>window.innerHeight-12) top=Math.max(12,a.top-368); // 下方放不下就往上翻
+  pop.style.top=top+'px'; pop.style.left=left+'px';
+  setTimeout(()=>{ const close=e=>{ if(!pop.contains(e.target)){h.innerHTML='';document.removeEventListener('mousedown',close);} }; document.addEventListener('mousedown',close); },0); }
 function moveAllToPool(){ const day=getDay(viewDate); const open=day.entries.filter(e=>!e.done); if(open.length===0){toast('没有可移动的事');return;}
   const snap=JSON.parse(JSON.stringify({entries:day.entries,pool:state.pool}));
   open.forEach(e=>{ state.pool.push({id:'p'+Date.now()+Math.random().toString(36).slice(2,5),text:e.text,tags:[...(e.tags||[])],group:e.group||null}); });
