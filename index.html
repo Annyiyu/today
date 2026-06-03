@@ -513,6 +513,30 @@ function migrate(s){
   if(typeof s.poolFold!=='boolean') s.poolFold=false;
   if(!s.groupColors||typeof s.groupColors!=='object') s.groupColors={}; return s;
 }
+// ===== carry forward: 没打勾、没删、没挪「以后」的事，永远跟到今天 =====
+// 搬对象本身(保留 id/tags/组)，原处只留打过勾的 → 幂等，重开不重搬，回顾视图不双算。
+// 不碰未来天、不碰「以后」池。无 cap：什么该放手是你的决定，系统只笨而忠实地往前带。
+function carryForward(){
+  if(!state||!state.days) return;
+  const today=todayKey();
+  const pastKeys=Object.keys(state.days).filter(k=>k<today).sort(); // YYYY-MM-DD 字典序==时间序
+  let openTotal=0; pastKeys.forEach(k=>{ openTotal+=(state.days[k].entries||[]).filter(e=>!e.done).length; });
+  if(openTotal===0) return;
+  const snap=JSON.parse(JSON.stringify(state.days)); // 整段 days 快照，给撤销
+  const todayDay=getDay(today);
+  const seen=new Set(todayDay.entries.map(e=>e.id));
+  const carried=[];
+  pastKeys.forEach(k=>{ const d=state.days[k]; const open=(d.entries||[]).filter(e=>!e.done);
+    if(open.length===0) return;
+    open.forEach(e=>{ if(!e.from)e.from=k; if(!seen.has(e.id)){ carried.push(e); seen.add(e.id); } });
+    d.entries=(d.entries||[]).filter(e=>e.done); // 原处只留真打过勾的
+  });
+  if(carried.length===0) return;
+  todayDay.entries=carried.concat(todayDay.entries); // 等过的在上，今天新加的在下
+  save();
+  const n=carried.length;
+  setTimeout(()=>{ toast(`带回 ${n} 件没做完的`,'撤销',()=>{ state.days=snap; save(); switchDay(); }); }, 700);
+}
 // ===== cloud save (debounced + exponential backoff retry) =====
 let saveTimer=null, pendingSave=false, saving=false, failCount=0;
 function save(){ if(!session) return; pendingSave=true; setSaveDot('saving'); if(saveTimer)clearTimeout(saveTimer); saveTimer=setTimeout(doSave,500); }
@@ -1443,6 +1467,7 @@ async function loadFromCloud(){
     if(error) throw error;
     if(data&&data.data){ state=migrate(data.data); }
     else { state=fresh(); }
+    carryForward(); // 把今天之前没做完的事带到今天（在首次渲染前）
     showApp(); renderAll();
   }catch(e){ console.error('load failed',e); alert('加载数据失败: '+e.message); }
 }
