@@ -110,6 +110,45 @@ body {
 .mv-pool{ font-family:var(--zh); font-size:12.5px; color:var(--ink-soft); cursor:pointer; padding:6px 8px; border-radius:9px; transition:all 0.15s; }
 .mv-pool:hover{ background:#fdeef2; color:var(--accent-deep); }
 .mv-div{ height:1px; background:var(--line); margin:10px 0; }
+/* repeat: badges + overdue */
+.emeta{ display:flex; align-items:center; gap:7px; margin-top:4px; }
+.rep-badge{ font-size:12px; color:var(--ink-faint); cursor:default; }
+.due-badge{ font-size:11.5px; color:var(--ink-soft); font-family:var(--zh); background:rgba(80,75,95,0.05); padding:1px 8px; border-radius:999px; }
+.due-badge.overdue{ color:#c08a3e; background:rgba(192,138,62,0.12); }
+.entry.overdue .echeck{ border-color:#d9a25a; }
+/* repeat dialog form */
+.rep-dlg{ max-height:84vh; overflow-y:auto; width:340px; max-width:92vw; }
+.rep-sub{ font-family:var(--zh); font-size:13px; color:var(--ink-soft); margin:-4px 0 14px; }
+.rep-lab{ font-family:var(--zh); font-size:12px; color:var(--ink-faint); letter-spacing:0.04em; margin:14px 0 7px; }
+.rep-seg{ display:flex; gap:8px; }
+.rep-seg button{ flex:1; display:flex; flex-direction:column; gap:2px; align-items:center; font-family:var(--zh); font-size:14px; color:var(--ink); background:rgba(80,75,95,0.05); border:1px solid transparent; border-radius:11px; padding:9px 6px; cursor:pointer; transition:all 0.15s; }
+.rep-seg button small{ font-size:10.5px; color:var(--ink-faint); }
+.rep-seg button.on{ background:#fdeef2; border-color:var(--accent); color:var(--accent-deep); }
+.rep-seg button.on small{ color:var(--accent-deep); }
+.rep-seg.sm button{ flex-direction:row; font-size:13px; padding:7px 6px; }
+.ftype-row{ display:flex; flex-wrap:wrap; gap:6px; }
+.ftype{ font-family:var(--zh); font-size:12.5px; color:var(--ink); background:rgba(80,75,95,0.05); border:1px solid transparent; border-radius:999px; padding:5px 11px; cursor:pointer; transition:all 0.15s; }
+.ftype.on{ background:#fdeef2; border-color:var(--accent); color:var(--accent-deep); }
+.rep-detail{ margin-top:9px; }
+.rep-row{ display:flex; align-items:center; gap:7px; flex-wrap:wrap; font-family:var(--zh); font-size:14px; color:var(--ink); }
+.rep-in{ font-family:var(--zh); font-size:14px; color:var(--ink); border:1px solid var(--line-strong); border-radius:9px; padding:6px 9px; background:var(--paper); outline:none; }
+.rep-in:focus{ border-color:var(--accent); }
+.rep-hint{ font-size:12px; color:var(--ink-faint); }
+.wd-row{ display:flex; gap:5px; }
+.wd{ width:30px; height:30px; display:flex; align-items:center; justify-content:center; font-family:var(--zh); font-size:13px; color:var(--ink); background:rgba(80,75,95,0.05); border-radius:50%; cursor:pointer; transition:all 0.15s; }
+.wd.on{ background:var(--accent); color:#fff; }
+/* rule list */
+.rule-list{ display:flex; flex-direction:column; gap:8px; max-height:60vh; overflow-y:auto; margin:6px 0 4px; }
+.rule-li{ display:flex; align-items:flex-start; gap:8px; padding:10px 11px; background:rgba(255,255,255,0.6); border:1px solid var(--line); border-radius:12px; }
+.rule-li.paused{ opacity:0.55; }
+.rule-main{ flex:1; min-width:0; }
+.rule-txt{ font-size:14.5px; color:var(--ink); }
+.rule-meta{ font-size:12px; color:var(--ink-soft); margin-top:3px; }
+.rule-meta2{ font-size:11.5px; color:var(--ink-faint); margin-top:2px; }
+.rule-acts{ display:flex; gap:3px; }
+.rbtn{ width:26px; height:26px; border-radius:8px; display:flex; align-items:center; justify-content:center; font-size:14px; color:var(--ink-faint); cursor:pointer; transition:all 0.15s; }
+.rbtn:hover{ background:#fdeef2; color:var(--accent-deep); }
+.rbtn.del:hover{ background:rgba(201,111,104,0.12); color:#c96f68; }
 .dlabel .wd{ font-family:var(--zh); font-size:12.5px; color:var(--ink-soft); font-weight:400; margin-left:6px; }
 .dlabel .rel{ display:inline-block; font-family:var(--display); font-size:9.5px; font-weight:600; letter-spacing:0.06em;
   text-transform:uppercase; color:#fff; background:var(--accent); border-radius:999px; padding:1px 7px; margin-left:7px; vertical-align:middle; }
@@ -434,7 +473,7 @@ body.dragging{ cursor:grabbing; user-select:none; }
           <div id="v-river" style="display:none"><div class="river" id="river"></div><div class="vcap zh" id="rivcap"></div></div>
         </div>
       </div>
-      <div class="foot"><a id="export">Export</a>·<a id="import">Import</a>·<a id="signout">登出</a></div>
+      <div class="foot"><a id="rules">重复</a>·<a id="export">Export</a>·<a id="import">Import</a>·<a id="signout">登出</a></div>
     </div>
     <div class="page page-right">
       <div class="diary-saved zh" id="dsaved">已存</div>
@@ -521,7 +560,9 @@ function migrate(s){
     if(typeof d.doneFold!=='boolean')d.doneFold=true; }
   s.pool.forEach(p=>{ if(!Array.isArray(p.tags))p.tags=[]; if(!('group'in p))p.group=null; });
   if(typeof s.poolFold!=='boolean') s.poolFold=false;
-  if(!s.groupColors||typeof s.groupColors!=='object') s.groupColors={}; return s;
+  if(!s.groupColors||typeof s.groupColors!=='object') s.groupColors={};
+  if(!Array.isArray(s.rules)) s.rules=[]; // 重复规则
+  return s;
 }
 // ===== carry forward: 没打勾、没删、没挪「以后」的事，永远跟到今天 =====
 // 搬对象本身(保留 id/tags/组)，原处只留打过勾的 → 幂等，重开不重搬，回顾视图不双算。
@@ -547,6 +588,75 @@ function carryForward(){
   const n=carried.length;
   setTimeout(()=>{ toast(`带回 ${n} 件没做完的`,'撤销',()=>{ state.days=snap; save(); switchDay(); }); }, 700);
 }
+// ===== 重复引擎：随缘(flow)=完成才生下一个，单实例；必达(must)=每期都生，可堆 =====
+function addDays(k,n){ const d=parseKey(k); d.setDate(d.getDate()+n); return keyOf(d); }
+function _dim(y,m){ return new Date(y,m+1,0).getDate(); }
+function _nthWd(y,m,nth,wd){ const last=_dim(y,m);
+  if(nth===-1){ for(let d=last;d>=1;d--){ if(new Date(y,m,d).getDay()===wd)return d; } return null; }
+  let c=0; for(let d=1;d<=last;d++){ if(new Date(y,m,d).getDay()===wd){ c++; if(c===nth)return d; } } return null; }
+function matchesFreq(f,key){ const d=parseKey(key),y=d.getFullYear(),m=d.getMonth(),dm=d.getDate(),wd=d.getDay();
+  switch(f.type){
+    case 'daily': return true;
+    case 'everyN': { if(key<f.anchor)return false; const diff=Math.round((parseKey(key)-parseKey(f.anchor))/86400000); return diff%f.n===0; }
+    case 'weekly': { if(!f.weekdays.includes(wd))return false; const nw=f.n||1; if(nw===1)return true;
+      const aw=parseKey(f.anchor); const awMon=addDays(keyOf(aw),-((aw.getDay()+6)%7)); const curMon=addDays(key,-((wd+6)%7));
+      const widx=Math.round((parseKey(curMon)-parseKey(awMon))/86400000/7); return widx>=0&&widx%nw===0; }
+    case 'monthlyDate': return dm===Math.min(f.date,_dim(y,m));
+    case 'monthlyLast': return dm===_dim(y,m);
+    case 'monthlyNth': return dm===_nthWd(y,m,f.nth,f.weekday);
+    case 'yearly': return m===f.month&&dm===Math.min(f.day,_dim(y,m));
+  } return false; }
+function occOnOrAfter(f,fromKey){ let k=fromKey; for(let i=0;i<800;i++){ if(matchesFreq(f,k))return k; k=addDays(k,1); } return null; }
+function anyOpenInstance(rid){ for(const dk in state.days){ if((state.days[dk].entries||[]).some(e=>e.rule===rid&&!e.done))return true; } return false; }
+function countCompleted(rid){ let c=0; for(const dk in state.days){ (state.days[dk].entries||[]).forEach(e=>{ if(e.rule===rid&&e.done)c++; }); } return c; }
+function genInstance(rule,dateKey,dueKey){ getDay(dateKey).entries.unshift({
+  id:'e'+Date.now()+Math.random().toString(36).slice(2,5), text:rule.text, tags:[...(rule.tags||[])], group:rule.group||null,
+  done:false, rule:rule.id, due:dueKey, time:rule.time||null, tz:rule.tz||null }); }
+function reconcileRules(){ if(!state.rules||!state.rules.length)return; let changed=false; const tk=todayKey();
+  state.rules.forEach(rule=>{ if(rule.paused)return;
+    const limD=rule.until&&rule.until.type==='date'?rule.until.date:null;
+    const limN=rule.until&&rule.until.type==='count'?rule.until.n:null;
+    if(rule.mode==='flow'){
+      if(anyOpenInstance(rule.id))return;
+      if(limN!=null&&countCompleted(rule.id)>=limN)return;
+      if(limD!=null&&rule.nextDue>limD)return;
+      if(rule.nextDue<=tk){ genInstance(rule,tk,rule.nextDue); rule.nextDue=occOnOrAfter(rule.freq,addDays(tk,1)); changed=true; }
+    } else { let g=0;
+      while(rule.nextDue<=tk&&g<500){
+        if(limD!=null&&rule.nextDue>limD)break;
+        if(limN!=null&&countCompleted(rule.id)>=limN)break;
+        genInstance(rule,rule.nextDue,rule.nextDue); rule.nextDue=occOnOrAfter(rule.freq,addDays(rule.nextDue,1)); g++; changed=true; }
+    }
+  });
+  if(changed)save(); }
+// ----- 频率 → 人话 -----
+const _WD=['周日','周一','周二','周三','周四','周五','周六'];
+function freqLabel(f){ switch(f.type){
+  case 'daily': return '每天';
+  case 'everyN': return '每 '+f.n+' 天';
+  case 'weekly': { const wds=f.weekdays.slice().sort().map(w=>_WD[w]).join('、'); return (f.n>1?('每 '+f.n+' 周 · '):'每周 ')+wds; }
+  case 'monthlyDate': return '每月 '+f.date+' 号';
+  case 'monthlyLast': return '每月最后一天';
+  case 'monthlyNth': return '每月'+(f.nth===-1?'最后一个':('第 '+f.nth+' 个'))+_WD[f.weekday];
+  case 'yearly': return '每年 '+(f.month+1)+' 月 '+f.day+' 日';
+} return ''; }
+// ----- 时间 / 时区显示 -----
+const _TZ={cn:{zone:'Asia/Shanghai',flag:'🇨🇳',name:'中国'}, eu:{zone:'Europe/Berlin',flag:'🇪🇺',name:'欧洲'}};
+function _tzOffMin(date,zone){ const dtf=new Intl.DateTimeFormat('en-US',{timeZone:zone,hour12:false,year:'numeric',month:'2-digit',day:'2-digit',hour:'2-digit',minute:'2-digit',second:'2-digit'});
+  const p=dtf.formatToParts(date).reduce((a,x)=>{a[x.type]=x.value;return a;},{}); const asUTC=Date.UTC(+p.year,+p.month-1,+p.day,+(p.hour==='24'?'0':p.hour),+p.minute,+p.second); return Math.round((asUTC-date.getTime())/60000); }
+// 锚定时区的墙上时间 → 本地分钟数(可能跨天), 返回 {min, dayShift}
+function _anchoredLocal(hhmm,tz){ const [H,M]=hhmm.split(':').map(Number); const now=new Date();
+  const tzOff=_tzOffMin(now,_TZ[tz].zone); const locOff=-now.getTimezoneOffset(); // 本地领先UTC的分钟
+  let local=H*60+M-tzOff+locOff; let shift=0; while(local<0){local+=1440;shift--;} while(local>=1440){local-=1440;shift++;} return {min:local,shift}; }
+function dueTimeBadge(en){ if(!en.time)return null; const wrap=document.createElement('span'); wrap.className='due-badge';
+  if(!en.tz){ wrap.textContent='⏰ '+en.time; }
+  else { const tz=_TZ[en.tz]; const a=_anchoredLocal(en.time,en.tz); const lh=String(Math.floor(a.min/60)).padStart(2,'0')+':'+String(a.min%60).padStart(2,'0');
+    const same=(lh===en.time); wrap.textContent='⏰ '+tz.flag+en.time+(same?'':' · 这儿'+lh+(a.shift<0?'(前一天)':a.shift>0?'(次日)':'')); }
+  if(isOverdue(en)) wrap.classList.add('overdue'); return wrap; }
+function isOverdue(en){ const tk=todayKey(); if(!en.due)return false; if(en.due<tk)return true;
+  if(en.due===tk&&en.time){ const now=new Date(); const nowMin=now.getHours()*60+now.getMinutes();
+    let dueMin; if(en.tz){ const a=_anchoredLocal(en.time,en.tz); if(a.shift!==0)return a.shift<0; dueMin=a.min; } else { const [H,M]=en.time.split(':').map(Number); dueMin=H*60+M; }
+    return nowMin>dueMin; } return false; }
 // ===== cloud save (debounced + exponential backoff retry) =====
 let saveTimer=null, pendingSave=false, saving=false, failCount=0;
 function save(){ if(!session) return; pendingSave=true; setSaveDot('saving'); if(saveTimer)clearTimeout(saveTimer); saveTimer=setTimeout(doSave,500); }
@@ -908,7 +1018,7 @@ function buildEntryText(item, kind){
     wrap.appendChild(dl); });
   return wrap;
 }
-function buildEntry(en,anim){ const row=document.createElement('div'); row.className='entry'+(anim?' adding':'')+(en.done?' done':''); row.dataset.id=en.id; row.dataset.kind='entry';
+function buildEntry(en,anim){ const row=document.createElement('div'); row.className='entry'+(anim?' adding':'')+(en.done?' done':'')+(!en.done&&isOverdue(en)?' overdue':''); row.dataset.id=en.id; row.dataset.kind='entry';
   if(selectMode==='today'){
     if(en.done){ const sp=document.createElement('div'); sp.className='sel-box disabled'; sp.title='已完成的不参与移动'; row.appendChild(sp); }
     else { const sb=document.createElement('div'); sb.className='sel-box'+(selectedIds.has(en.id)?' on':''); sb.onclick=()=>toggleSelect(en.id); row.appendChild(sb); }
@@ -922,6 +1032,9 @@ function buildEntry(en,anim){ const row=document.createElement('div'); row.class
   const chk=document.createElement('div'); chk.className='echeck'+(en.done?' on':''); chk.title=en.done?'已完成':'点一下打勾'; chk.onclick=()=>toggleDone(en.id); row.appendChild(chk);
   const main=document.createElement('div'); main.className='emain';
   main.appendChild(buildEntryText(en, 'entry'));
+  const badge=dueTimeBadge(en); if(en.rule||badge){ const meta=document.createElement('div'); meta.className='emeta';
+    if(en.rule){ const rp=document.createElement('span'); rp.className='rep-badge'; rp.textContent='↻'; rp.title='重复任务（点齿轮管理）'; meta.appendChild(rp); }
+    if(badge) meta.appendChild(badge); main.appendChild(meta); }
   if(en.tags&&en.tags.length){main.appendChild(buildTagChips(en));}
   row.appendChild(main); const acts=document.createElement('div'); acts.className='eact';
   const cp=document.createElement('button'); cp.className='mbtn'; cp.innerHTML=ICON_COPY; cp.title='复制一条'; cp.onclick=()=>copyEntry(en.id);
@@ -969,6 +1082,7 @@ async function manageGroup(gname,ctx){
     <input class="add-in zh" id="grename" value="${esc(gname)}" style="width:100%;border:1.5px solid var(--accent);border-radius:10px;padding:8px 12px;margin-bottom:16px">
     <div class="dlg-m zh" style="margin-bottom:9px">颜色</div>
     <div class="gsw-grid">${swatches}</div>
+    <button class="dbtn cancel zh" id="grepeat" style="width:100%;margin-top:14px">↻ 整组设为重复…</button>
     <div class="dlg-act"><button class="dbtn cancel zh" id="gdissolve">解散组</button><button class="dbtn cancel zh" id="gdel" style="color:#c96f68;border-color:rgba(201,111,104,0.4)">删除组</button><button class="dbtn cancel zh">取消</button><button class="dbtn ok zh">保存</button></div></div>`;
   h.appendChild(ov);
   const close=()=>{h.innerHTML='';};
@@ -977,6 +1091,7 @@ async function manageGroup(gname,ctx){
     ov.querySelectorAll('.gsw').forEach(x=>x.style.boxShadow='none');
     s.style.boxShadow='0 0 0 2px var(--paper),0 0 0 4px '+GROUP_COLORS[chosen].name; }; });
   ov.querySelector('.cancel').onclick=close; ov.onclick=e=>{if(e.target===ov)close();};
+  ov.querySelector('#grepeat').onclick=()=>{ close(); applyRepeatToGroup(gname,ctx); };
   ov.querySelector('.ok').onclick=()=>{ const v=ov.querySelector('#grename').value.trim();
     if(!state.groupColors)state.groupColors={};
     if(v&&v!==gname){
@@ -1024,7 +1139,12 @@ function moveGroupToToday(gname){ const moving=state.pool.filter(p=>p.group===gn
   toast(`「${gname}」${moving.length}件 移到今天`,'撤销',()=>{ day.entries=snap.entries; state.pool=snap.pool; save(); renderEntries(); renderPool(); renderViews(); }); }
 function editEntry(id){ const day=getDay(viewDate); const en=day.entries.find(e=>e.id===id); if(!en)return;
   const row=document.querySelector(`#entries .entry[data-id="${id}"]`); const main=row.querySelector('.emain'); const wrap=main.querySelector('.etext-wrap');
-  const ta=makeEntryTextarea(en.text, (v)=>{ if(v.trim()){en.text=v;save();} renderEntries(); renderViews(); }, ()=>{ renderEntries(); });
+  const ta=makeEntryTextarea(en.text, async (v)=>{ const nv=v;
+    if(nv.trim()&&nv!==en.text){ en.text=nv; save();
+      if(en.rule){ const rule=(state.rules||[]).find(r=>r.id===en.rule);
+        if(rule){ const fut=await dialog({title:'这是一条重复任务',msg:`「${esc(freqLabel(rule.freq))}」的一次重复。改动要套用到以后吗？`,ok:'以后都用新的',cancel:'只改这一条'});
+          if(fut){ rule.text=nv; save(); toast('以后的重复都用新的'); } } } }
+    renderEntries(); renderViews(); }, ()=>{ renderEntries(); });
   main.insertBefore(ta,wrap); wrap.style.display='none';
   setTimeout(()=>{ta.focus(); ta.selectionStart=ta.selectionEnd=ta.value.length; autoGrow(ta);},0); }
 // shared multi-line textarea with bullet auto-continuation for entry/pool detail唠叨
@@ -1242,6 +1362,7 @@ function openMovePicker(id, ctx, anchorEl){
     let html=`<div class="mv-title zh">移到…</div><div class="mv-quick">`
       +`<span class="mv-q zh" data-k="${dk(-1)}">昨天</span><span class="mv-q zh now" data-k="${dk(0)}">今天</span><span class="mv-q zh" data-k="${dk(1)}">明天</span></div>`;
     if(ctx!=='pool') html+=`<div class="mv-pool zh" data-pool="1">↘ 收进「以后」</div>`;
+    if(ctx!=='pool') html+=`<div class="mv-pool zh" data-repeat="1">↻ 设为重复…</div>`;
     html+=`<div class="mv-div"></div><div class="cal-head"><span class="cal-nav" data-d="-1">‹</span><span class="cal-title">${y} 年 ${mn[m]}</span><span class="cal-nav" data-d="1">›</span></div><div class="cal-grid">`;
     ['一','二','三','四','五','六','日'].forEach(w=>html+=`<div class="cal-wd">${w}</div>`);
     for(let i=0;i<startDow;i++) html+=`<div class="cal-cell empty"></div>`;
@@ -1249,7 +1370,8 @@ function openMovePicker(id, ctx, anchorEl){
       html+=`<div class="cal-cell${k===tk?' today':''}" data-k="${k}">${d}${has?'<span class="cal-dot"></span>':''}</div>`; }
     html+=`</div>`; pop.innerHTML=html;
     pop.querySelectorAll('.mv-q').forEach(q=>q.onclick=()=>pick(q.dataset.k));
-    const mp=pop.querySelector('.mv-pool'); if(mp)mp.onclick=toPool;
+    const mp=pop.querySelector('.mv-pool[data-pool]'); if(mp)mp.onclick=toPool;
+    const mr=pop.querySelector('.mv-pool[data-repeat]'); if(mr)mr.onclick=()=>{ h.innerHTML=''; createRuleFromEntry(id); };
     pop.querySelectorAll('.cal-nav').forEach(n=>n.onclick=()=>{ pm.m+=parseInt(n.dataset.d); if(pm.m<0){pm.m=11;pm.y--;} if(pm.m>11){pm.m=0;pm.y++;} draw(); });
     pop.querySelectorAll('.cal-cell[data-k]').forEach(c=>c.onclick=()=>pick(c.dataset.k)); }
   draw(); h.appendChild(pop);
@@ -1287,6 +1409,137 @@ function movePoolItemsToToday(ids){ const moving=state.pool.filter(p=>ids.includ
   state.pool=state.pool.filter(p=>!ids.includes(p.id));
   save(); renderEntries(); renderPool(); renderViews();
   toast(`${moving.length} 件移到今天`,'撤销',()=>{ day.entries=snap.entries; state.pool=snap.pool; save(); renderEntries(); renderPool(); renderViews(); }); }
+// ===== 重复：设置对话框 / 规则清单 =====
+function _validTime(s){ const m=/^\s*(\d{1,2}):(\d{2})\s*$/.exec(s||''); if(!m)return null; const H=+m[1],M=+m[2]; if(H>23||M>59)return null; return String(H).padStart(2,'0')+':'+String(M).padStart(2,'0'); }
+function repeatDialog(opts){ opts=opts||{}; const rule=opts.rule||null; const seed=opts.seed||null; const groupName=opts.groupName||null;
+  const h=document.getElementById('dlghost'); h.innerHTML='';
+  const ov=document.createElement('div'); ov.className='ov';
+  const td=parseKey(todayKey());
+  const c = rule ? JSON.parse(JSON.stringify(rule)) : { text:(seed&&seed.text)||'', mode:'flow', freq:{type:'daily'}, time:null, tz:null, until:null };
+  if(!c.freq) c.freq={type:'daily'};
+  const card=document.createElement('div'); card.className='dlg rep-dlg';
+  const title = groupName?`整组「${esc(groupName)}」设为重复` : (rule?'编辑重复':'设为重复');
+  const sub = groupName?`组里 ${opts.memberCount} 件，每件各自按同一节奏重复` : (c.text?esc(c.text):'');
+  card.innerHTML=`<div class="dlg-t zh">${title}</div>${sub?`<div class="rep-sub zh">${sub}</div>`:''}
+    <div class="rep-lab zh">没做完时</div>
+    <div class="rep-seg" id="rep-mode">
+      <button data-mode="flow" class="${c.mode!=='must'?'on':''}">🌱 随缘<small>漏了算了，只留一个</small></button>
+      <button data-mode="must" class="${c.mode==='must'?'on':''}">📅 必达<small>每一期都会出现</small></button></div>
+    <div class="rep-lab zh">多久一次</div>
+    <div class="ftype-row" id="rep-ftypes"></div>
+    <div class="rep-detail" id="rep-detail"></div>
+    <div class="rep-lab zh">时间（可选）</div>
+    <div class="rep-row"><input id="rep-time" class="rep-in zh" placeholder="如 14:00" style="width:90px" value="${c.time||''}">
+      <select id="rep-tz" class="rep-in zh"><option value="">随身（跟着你所在地）</option><option value="cn">🇨🇳 钉死中国时间</option><option value="eu">🇪🇺 钉死欧洲时间</option></select></div>
+    <div class="rep-lab zh">重复到</div>
+    <div class="rep-seg sm" id="rep-untilmode">
+      <button data-u="none" class="on">永远</button><button data-u="date">到某天</button><button data-u="count">N 次后停</button></div>
+    <div class="rep-detail" id="rep-until-detail"></div>
+    <div class="dlg-act"><button class="dbtn cancel zh" id="rep-cancel">取消</button><button class="dbtn ok zh" id="rep-ok">${rule?'保存':'设为重复'}</button></div>`;
+  ov.appendChild(card); h.appendChild(ov);
+  const close=()=>{h.innerHTML='';}; ov.onclick=e=>{if(e.target===ov)close();};
+  card.querySelector('#rep-cancel').onclick=close;
+  // mode seg
+  card.querySelectorAll('#rep-mode button').forEach(b=>b.onclick=()=>{ card.querySelectorAll('#rep-mode button').forEach(x=>x.classList.remove('on')); b.classList.add('on'); });
+  if(c.tz) card.querySelector('#rep-tz').value=c.tz;
+  // freq types
+  const FT=[['daily','每天'],['everyN','每 N 天'],['weekly','每周'],['monthlyDate','每月某号'],['monthlyLast','每月最后一天'],['monthlyNth','每月第N个周X'],['yearly','每年']];
+  const ftRow=card.querySelector('#rep-ftypes');
+  FT.forEach(([t,lab])=>{ const b=document.createElement('button'); b.className='ftype'+(c.freq.type===t?' on':''); b.dataset.ft=t; b.textContent=lab;
+    b.onclick=()=>{ ftRow.querySelectorAll('.ftype').forEach(x=>x.classList.remove('on')); b.classList.add('on'); drawDetail(t); }; ftRow.appendChild(b); });
+  const det=card.querySelector('#rep-detail');
+  function drawDetail(t){ const f=c.freq.type===t?c.freq:{}; const wdNow=td.getDay();
+    if(t==='daily'){ det.innerHTML='<div class="rep-hint zh">每一天都会出现。</div>'; }
+    else if(t==='everyN'){ det.innerHTML=`<div class="rep-row zh">每 <input id="d-n" class="rep-in" type="number" min="1" value="${f.n||2}" style="width:64px"> 天一次</div>`; }
+    else if(t==='weekly'){ const sel=f.weekdays||[wdNow]; det.innerHTML=`<div class="wd-row" id="d-wd">${[0,1,2,3,4,5,6].map(w=>`<span class="wd${sel.includes(w)?' on':''}" data-wd="${w}">${_WD[w].slice(1)}</span>`).join('')}</div><div class="rep-row zh" style="margin-top:8px">每 <input id="d-nw" class="rep-in" type="number" min="1" value="${f.n||1}" style="width:56px"> 周</div>`;
+      det.querySelectorAll('.wd').forEach(s=>s.onclick=()=>s.classList.toggle('on')); }
+    else if(t==='monthlyDate'){ det.innerHTML=`<div class="rep-row zh">每月 <input id="d-date" class="rep-in" type="number" min="1" max="31" value="${f.date||td.getDate()}" style="width:64px"> 号<span class="rep-hint zh" style="margin-left:8px">31号会自动夹到月底</span></div>`; }
+    else if(t==='monthlyLast'){ det.innerHTML='<div class="rep-hint zh">每个月的最后一天。</div>'; }
+    else if(t==='monthlyNth'){ const nth=f.nth!==undefined?f.nth:2, w=f.weekday!==undefined?f.weekday:wdNow;
+      det.innerHTML=`<div class="rep-row zh">每月 <select id="d-nth" class="rep-in">${[['1','第一个'],['2','第二个'],['3','第三个'],['4','第四个'],['5','第五个'],['-1','最后一个']].map(([v,l])=>`<option value="${v}" ${(''+nth)===v?'selected':''}>${l}</option>`).join('')}</select> <select id="d-nwd" class="rep-in">${_WD.map((l,i)=>`<option value="${i}" ${w===i?'selected':''}>${l}</option>`).join('')}</select></div>`; }
+    else if(t==='yearly'){ const mo=f.month!==undefined?f.month:td.getMonth(), dy=f.day||td.getDate();
+      det.innerHTML=`<div class="rep-row zh">每年 <input id="d-mo" class="rep-in" type="number" min="1" max="12" value="${mo+1}" style="width:56px"> 月 <input id="d-dy" class="rep-in" type="number" min="1" max="31" value="${dy}" style="width:56px"> 日</div>`; }
+  }
+  drawDetail(c.freq.type);
+  // until
+  const uDet=card.querySelector('#rep-until-detail');
+  function drawUntil(u){ if(u==='date'){ const v=(c.until&&c.until.type==='date')?c.until.date:''; uDet.innerHTML=`<div class="rep-row zh"><input id="u-date" class="rep-in" type="date" value="${v}"></div>`; }
+    else if(u==='count'){ const v=(c.until&&c.until.type==='count')?c.until.n:10; uDet.innerHTML=`<div class="rep-row zh">做满 <input id="u-n" class="rep-in" type="number" min="1" value="${v}" style="width:64px"> 次后停（只数真做成的）</div>`; }
+    else uDet.innerHTML=''; }
+  const uInit = c.until?c.until.type:'none';
+  card.querySelectorAll('#rep-untilmode button').forEach(b=>{ if(b.dataset.u===uInit){card.querySelectorAll('#rep-untilmode button').forEach(x=>x.classList.remove('on'));b.classList.add('on');}
+    b.onclick=()=>{ card.querySelectorAll('#rep-untilmode button').forEach(x=>x.classList.remove('on')); b.classList.add('on'); drawUntil(b.dataset.u); }; });
+  drawUntil(uInit);
+  // save
+  card.querySelector('#rep-ok').onclick=()=>{
+    const mode=card.querySelector('#rep-mode .on').dataset.mode;
+    const ft=card.querySelector('.ftype.on').dataset.ft; let freq={type:ft};
+    if(ft==='everyN'){ freq.n=Math.max(1,+card.querySelector('#d-n').value||2); }
+    else if(ft==='weekly'){ const wd=[...card.querySelectorAll('#d-wd .wd.on')].map(x=>+x.dataset.wd); if(!wd.length){toast('选至少一个星期几');return;} freq.weekdays=wd; freq.n=Math.max(1,+card.querySelector('#d-nw').value||1); }
+    else if(ft==='monthlyDate'){ freq.date=Math.min(31,Math.max(1,+card.querySelector('#d-date').value||1)); }
+    else if(ft==='monthlyNth'){ freq.nth=+card.querySelector('#d-nth').value; freq.weekday=+card.querySelector('#d-nwd').value; }
+    else if(ft==='yearly'){ freq.month=Math.min(12,Math.max(1,+card.querySelector('#d-mo').value||1))-1; freq.day=Math.min(31,Math.max(1,+card.querySelector('#d-dy').value||1)); }
+    const timeRaw=card.querySelector('#rep-time').value; const time=timeRaw.trim()?_validTime(timeRaw):null;
+    if(timeRaw.trim()&&!time){ toast('时间格式不对，如 14:00'); return; }
+    const tz=card.querySelector('#rep-tz').value||null;
+    const um=card.querySelector('#rep-untilmode .on').dataset.u; let until=null;
+    if(um==='date'){ const v=card.querySelector('#u-date').value; if(v)until={type:'date',date:v}; }
+    else if(um==='count'){ until={type:'count',n:Math.max(1,+card.querySelector('#u-n').value||1)}; }
+    const text = groupName?null:(rule?(c.text):(seed?seed.text:''));
+    close(); opts.onSave({mode,freq,time,tz,until,text,tags:(rule?rule.tags:(seed?seed.tags:[]))||[],group:(rule?rule.group:(seed?seed.group:null))}); }
+}
+// 从一条 entry 设为重复：原一次性条目交给规则接管（按日子重新出现，避免重复）
+function createRuleFromEntry(id){ const day=getDay(viewDate); const idx=day.entries.findIndex(e=>e.id===id); if(idx<0)return; const en=day.entries[idx];
+  repeatDialog({ seed:{text:en.text,tags:en.tags,group:en.group}, onSave:(cfg)=>{
+    const created=todayKey(); const freq=cfg.freq; if(freq.type==='everyN'||freq.type==='weekly')freq.anchor=created;
+    const rule={id:'r'+Date.now()+Math.random().toString(36).slice(2,5), text:en.text, tags:[...(en.tags||[])], group:en.group||null,
+      mode:cfg.mode, freq, time:cfg.time, tz:cfg.tz, until:cfg.until, paused:false, created, nextDue:occOnOrAfter(freq,created) };
+    state.rules.push(rule); day.entries.splice(idx,1); reconcileRules(); save(); renderEntries(); renderViews();
+    toast('设为重复 · '+freqLabel(freq)); }});
+}
+function applyRepeatToGroup(gname,ctx){ ctx=ctx||'today'; const arr=ctx==='pool'?state.pool:getDay(viewDate).entries;
+  const members=arr.filter(e=>e.group===gname&&(ctx==='pool'||!e.done)); if(!members.length){toast('这组没有可设的事');return;}
+  repeatDialog({ groupName:gname, memberCount:members.length, onSave:(cfg)=>{
+    const created=todayKey();
+    members.forEach(m=>{ const freq=JSON.parse(JSON.stringify(cfg.freq)); if(freq.type==='everyN'||freq.type==='weekly')freq.anchor=created;
+      state.rules.push({id:'r'+Date.now()+Math.random().toString(36).slice(2,5)+(''+m.id).slice(-3), text:m.text, tags:[...(m.tags||[])], group:gname,
+        mode:cfg.mode, freq, time:cfg.time, tz:cfg.tz, until:cfg.until?JSON.parse(JSON.stringify(cfg.until)):null, paused:false, created, nextDue:occOnOrAfter(freq,created) }); });
+    if(ctx==='pool') state.pool=state.pool.filter(e=>e.group!==gname);
+    else { const day=getDay(viewDate); day.entries=day.entries.filter(e=>!(e.group===gname&&!e.done)); }
+    reconcileRules(); save(); renderEntries(); renderPool(); renderViews();
+    toast(`「${gname}」整组设为重复 · ${freqLabel(cfg.freq)}`); }});
+}
+function editRule(rid){ const rule=state.rules.find(r=>r.id===rid); if(!rule)return;
+  repeatDialog({ rule, onSave:(cfg)=>{ const freqChanged=JSON.stringify(rule.freq)!==JSON.stringify(cfg.freq);
+    rule.mode=cfg.mode; rule.time=cfg.time; rule.tz=cfg.tz; rule.until=cfg.until;
+    if(freqChanged){ const freq=cfg.freq; if(freq.type==='everyN'||freq.type==='weekly')freq.anchor=rule.created||todayKey(); rule.freq=freq; rule.nextDue=occOnOrAfter(freq,todayKey()); }
+    save(); reconcileRules(); renderEntries(); renderViews(); ruleListPanel(); toast('规则已更新（只影响以后生成的）'); }});
+}
+function ruleListPanel(){ const h=document.getElementById('dlghost'); h.innerHTML='';
+  const ov=document.createElement('div'); ov.className='ov';
+  const card=document.createElement('div'); card.className='dlg rep-dlg';
+  const rules=state.rules||[];
+  let body = rules.length? rules.map(r=>{
+    const done=countCompleted(r.id); const paused=r.paused;
+    const next = paused?'已暂停':(r.nextDue?`下次 ${dayLabel(r.nextDue)}`:'—');
+    const untilTxt = r.until? (r.until.type==='date'?` · 到 ${r.until.date}`:` · 满 ${r.until.n} 次停`):'';
+    return `<div class="rule-li${paused?' paused':''}" data-r="${r.id}">
+      <div class="rule-main"><div class="rule-txt zh">${esc(r.text)}</div>
+        <div class="rule-meta zh">${r.mode==='must'?'📅 必达':'🌱 随缘'} · ${esc(freqLabel(r.freq))}${r.time?' · ⏰'+r.time:''}${untilTxt}</div>
+        <div class="rule-meta2 zh">${next} · 已完成 ${done} 次</div></div>
+      <div class="rule-acts"><span class="rbtn" data-act="pause" title="${paused?'恢复':'暂停'}">${paused?'▶':'⏸'}</span><span class="rbtn" data-act="edit" title="编辑">✎</span><span class="rbtn del" data-act="del" title="删除规则">×</span></div></div>`;
+  }).join('') : '<div class="rep-hint zh" style="padding:18px 4px">还没有重复任务。在任意一条事的 ↪ 里选「设为重复」。</div>';
+  card.innerHTML=`<div class="dlg-t zh">重复任务</div><div class="rule-list">${body}</div><div class="dlg-act"><button class="dbtn ok zh" id="rl-close">关闭</button></div>`;
+  ov.appendChild(card); h.appendChild(ov);
+  const close=()=>{h.innerHTML='';}; ov.onclick=e=>{if(e.target===ov)close();}; card.querySelector('#rl-close').onclick=close;
+  card.querySelectorAll('.rule-li').forEach(li=>{ const rid=li.dataset.r;
+    li.querySelectorAll('.rbtn').forEach(b=>b.onclick=async()=>{ const act=b.dataset.act;
+      const rule=state.rules.find(r=>r.id===rid); if(!rule)return;
+      if(act==='pause'){ rule.paused=!rule.paused; save(); ruleListPanel(); }
+      else if(act==='edit'){ close(); editRule(rid); }
+      else if(act==='del'){ const ok=await dialog({title:'删除这条重复规则？',msg:'以后不再自动生成；已经出现过的照样留着、不动。',ok:'删除规则',cancel:'取消'}); if(!ok)return;
+        state.rules=state.rules.filter(r=>r.id!==rid); save(); ruleListPanel(); } }); });
+}
 // ===== multi-select mode =====
 function enterSelectMode(which){ selectMode=which; selectedIds=new Set(); renderEntries(); renderPool(); renderBatchBar(); }
 function exitSelectMode(){ selectMode=null; selectedIds=new Set(); renderEntries(); renderPool(); renderBatchBar(); }
@@ -1498,6 +1751,7 @@ function openCalendar(){
   pop.style.top=top+'px'; pop.style.left=left+'px';
   setTimeout(()=>{ const close=e=>{ if(!pop.contains(e.target)){h.innerHTML='';document.removeEventListener('mousedown',close);} }; document.addEventListener('mousedown',close); },0);
 }
+document.getElementById('rules').onclick=()=>ruleListPanel();
 document.getElementById('export').onclick=()=>{const b=new Blob([JSON.stringify(state,null,2)],{type:'application/json'});const u=URL.createObjectURL(b);const a=document.createElement('a');a.href=u;a.download='today-'+todayKey()+'.json';a.click();URL.revokeObjectURL(u);};
 document.getElementById('import').onclick=async()=>{const inp=document.createElement('input');inp.type='file';inp.accept='.json';inp.onchange=async e=>{const f=e.target.files[0];if(!f)return;const ok=await dialog({title:'导入数据？',msg:'导入会<b>覆盖</b>当前所有数据。建议先 Export 备份现在的。',ok:'导入覆盖'});if(!ok)return;const r=new FileReader();r.onload=ev=>{try{const im=JSON.parse(ev.target.result);if(!im.days){toast('文件结构不对');return;}state=migrate(im);save();switchDay();renderPool();toast('导入成功');}catch(err){toast('导入失败');}};r.readAsText(f);};inp.click();};
 // ===== render gate: only render app when signed in + loaded =====
@@ -1533,6 +1787,7 @@ async function loadFromCloud(){
     if(error) throw error;
     if(data&&data.data){ state=migrate(data.data); }
     else { state=fresh(); }
+    reconcileRules(); // 先按规则生成到期的重复实例（必达会落在到期日，随后被 carry 带到今天）
     carryForward(); // 把今天之前没做完的事带到今天（在首次渲染前）
     showApp(); renderAll();
   }catch(e){ console.error('load failed',e); alert('加载数据失败: '+e.message); }
