@@ -225,6 +225,7 @@ body.dragging{ cursor:grabbing; user-select:none; }
 .echeck:hover{ border-color:var(--accent); }
 .echeck.on{ background:var(--accent); border-color:var(--accent); }
 .echeck.on::after{ content:''; width:5px; height:8px; border:solid #fff; border-width:0 1.5px 1.5px 0; transform:rotate(45deg) translateY(-1px); }
+.echeck.prog{ border-color:var(--accent); background:linear-gradient(90deg, var(--accent) 0 50%, transparent 50% 100%); }
 .emain{ flex:1; min-width:0; }
 .etext{ font-family:var(--zh); font-size:15px; color:var(--ink); word-break:break-word; cursor:text; }
 .etext-wrap{ display:flex; flex-direction:column; gap:2px; }
@@ -555,7 +556,7 @@ function migrate(s){
   if(!Array.isArray(s.tags)||!s.tags.length) s.tags=JSON.parse(JSON.stringify(DEFAULT_TAGS));
   if(!s.days) s.days={}; if(!Array.isArray(s.pool)) s.pool=[];
   for(const k in s.days){ const d=s.days[k]; if(!Array.isArray(d.entries))d.entries=[];
-    d.entries.forEach(e=>{ if(typeof e.done!=='boolean')e.done=false; if(!Array.isArray(e.tags))e.tags=[]; if(!('group'in e))e.group=null; });
+    d.entries.forEach(e=>{ if(typeof e.done!=='boolean')e.done=false; if(typeof e.prog!=='boolean')e.prog=false; if(e.done)e.prog=false; if(!Array.isArray(e.tags))e.tags=[]; if(!('group'in e))e.group=null; });
     if(typeof d.diary!=='string')d.diary=''; if(!d.mood)d.mood={m:null,n:null,e:null};
     if(typeof d.doneFold!=='boolean')d.doneFold=true; }
   s.pool.forEach(p=>{ if(!Array.isArray(p.tags))p.tags=[]; if(!('group'in p))p.group=null; });
@@ -783,10 +784,15 @@ function updateDropIndicator(x,y){
   clearDropMarks(); drag.dropInfo=null;
   const entriesBox=document.getElementById('entries'); const poolBox=document.getElementById('pool');
   const eRect=entriesBox.getBoundingClientRect(); const pRect=poolBox.getBoundingClientRect();
-  const inEntries = y>=eRect.top-30 && y<=eRect.bottom+30 && x>=eRect.left-20 && x<=eRect.right+20;
-  const inPool = y>=pRect.top-30 && y<=pRect.bottom+30 && x>=pRect.left-20 && x<=pRect.right+20;
+  // 命中区：横向落在内容列里就算数（左右各放宽 40px）。纵向不留死区——
+  // 用「今天」底边与「以后」顶边的中线一分为二；指针在最顶/最底也总会归到一段，
+  // 由下面的 idx 循环自动夹到「最前」(idx=0) 或「最后」(idx=length)。
+  const colL=Math.min(eRect.left,pRect.left)-40, colR=Math.max(eRect.right,pRect.right)+40;
+  const inColumn = x>=colL && x<=colR;
+  const poolHasContent = poolBox.querySelectorAll('.entry, .group-cluster').length>0;
+  const gap = poolHasContent ? (eRect.bottom+pRect.top)/2 : Infinity; // 以后没内容时，整列都算「今天」
   if(drag.kind==='group'){
-    if(!inEntries) return;
+    if(!inColumn) return; // 组只在「今天」里重排
     const clusters=Array.from(entriesBox.querySelectorAll('.group-cluster')).filter(c=>c.dataset.group!==drag.id);
     let idx=clusters.length;
     for(let i=0;i<clusters.length;i++){ const r=clusters[i].getBoundingClientRect(); if(y<r.top+r.height/2){idx=i;break;} }
@@ -797,9 +803,9 @@ function updateDropIndicator(x,y){
     return;
   }
   let targetSection=null, box=null;
-  if(inEntries){ targetSection='entries'; box=entriesBox; }
-  else if(inPool){ targetSection='pool'; box=poolBox; }
-  else return;
+  if(!inColumn) return;
+  if(y<gap){ targetSection='entries'; box=entriesBox; }
+  else { targetSection='pool'; box=poolBox; }
   if(targetSection==='pool'){
     box.classList.add('drop-zone-hot');
     const rows=Array.from(box.querySelectorAll('.entry')).filter(r=>!(drag.kind==='pool'&&r.dataset.id===drag.id));
@@ -1029,7 +1035,8 @@ function buildEntry(en,anim){ const row=document.createElement('div'); row.class
     row.appendChild(main2); return row;
   }
   const grip=document.createElement('div'); grip.className='grip'; grip.innerHTML='⋮⋮'; grip.title='拖动'; attachDrag(grip,'entry',en.id); row.appendChild(grip);
-  const chk=document.createElement('div'); chk.className='echeck'+(en.done?' on':''); chk.title=en.done?'已完成':'点一下打勾'; chk.onclick=()=>toggleDone(en.id); row.appendChild(chk);
+  const chk=document.createElement('div'); const _st=en.done?'done':(en.prog?'prog':'none');
+  chk.className='echeck'+(_st==='done'?' on':_st==='prog'?' prog':''); chk.title=_st==='done'?'已完成（再点取消）':_st==='prog'?'进行中（再点完成）':'点一下 → 进行中'; chk.onclick=()=>toggleDone(en.id); row.appendChild(chk);
   const main=document.createElement('div'); main.className='emain';
   main.appendChild(buildEntryText(en, 'entry'));
   const badge=dueTimeBadge(en); if(en.rule||badge){ const meta=document.createElement('div'); meta.className='emeta';
@@ -1043,7 +1050,11 @@ function buildEntry(en,anim){ const row=document.createElement('div'); row.class
   const tg=document.createElement('button'); tg.className='mbtn'; tg.innerHTML='⊕'; tg.title='标签'; tg.onclick=()=>retag(en.id,row);
   const dl=document.createElement('button'); dl.className='mbtn'; dl.innerHTML='×'; dl.title='删除'; dl.onclick=()=>removeEntry(en.id);
   acts.appendChild(cp);acts.appendChild(mv);acts.appendChild(gp);acts.appendChild(tg);acts.appendChild(dl);row.appendChild(acts); return row; }
-function toggleDone(id){ const day=getDay(viewDate); const en=day.entries.find(e=>e.id===id); if(!en)return; en.done=!en.done; save(); renderEntries(); }
+function toggleDone(id){ const day=getDay(viewDate); const en=day.entries.find(e=>e.id===id); if(!en)return;
+  if(en.done){ en.done=false; en.prog=false; }        // ✓ → 空
+  else if(en.prog){ en.prog=false; en.done=true; }     // ◐ → ✓
+  else { en.prog=true; }                               // 空 → ◐进行中
+  save(); renderEntries(); renderViews(); }
 // existing group names in a given context
 function existingGroupsIn(ctx){ const set=[]; const arr=ctx==='pool'?state.pool:getDay(viewDate).entries; arr.forEach(e=>{ if(e.group&&!set.includes(e.group))set.push(e.group); }); return set; }
 function existingGroups(){ return existingGroupsIn('today'); }
