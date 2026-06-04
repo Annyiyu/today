@@ -134,9 +134,9 @@ body {
 .rep-in{ font-family:var(--zh); font-size:14px; color:var(--ink); border:1px solid var(--line-strong); border-radius:9px; padding:6px 9px; background:var(--paper); outline:none; }
 .rep-in:focus{ border-color:var(--accent); }
 .rep-hint{ font-size:12px; color:var(--ink-faint); }
-.wd-row{ display:flex; gap:5px; }
-.wd{ width:30px; height:30px; display:flex; align-items:center; justify-content:center; font-family:var(--zh); font-size:13px; color:var(--ink); background:rgba(80,75,95,0.05); border-radius:50%; cursor:pointer; transition:all 0.15s; }
-.wd.on{ background:var(--accent); color:#fff; }
+.rep-wd-row{ display:flex; gap:5px; }
+.rep-wd{ width:30px; height:30px; display:flex; align-items:center; justify-content:center; font-family:var(--zh); font-size:13px; color:var(--ink); background:rgba(80,75,95,0.05); border-radius:50%; cursor:pointer; transition:all 0.15s; }
+.rep-wd.on{ background:var(--accent); color:#fff; }
 /* rule list */
 .rule-list{ display:flex; flex-direction:column; gap:8px; max-height:60vh; overflow-y:auto; margin:6px 0 4px; }
 .rule-li{ display:flex; align-items:flex-start; gap:8px; padding:10px 11px; background:rgba(255,255,255,0.6); border:1px solid var(--line); border-radius:12px; }
@@ -388,7 +388,7 @@ body.dragging{ cursor:grabbing; user-select:none; }
 .dlg-t{ font-family:var(--zh); font-size:17px; color:var(--ink); margin-bottom:9px; }
 .dlg-m{ font-family:var(--zh); font-size:13px; color:var(--ink-soft); line-height:1.6; margin-bottom:20px; }
 .dlg-m b{ color:var(--ink); }
-.dlg-act{ display:flex; gap:9px; justify-content:flex-end; flex-wrap:wrap; }
+.dlg-act{ display:flex; gap:10px; row-gap:10px; justify-content:flex-end; flex-wrap:wrap; margin-top:18px; }
 .dbtn{ font-family:var(--zh); font-size:12.5px; padding:8px 16px; border-radius:999px; cursor:pointer; border:1px solid transparent; background:transparent; transition:all 0.18s; }
 .dbtn.cancel{ color:var(--ink-soft); border-color:var(--line-strong); }
 .dbtn.cancel:hover{ color:var(--ink); border-color:var(--ink-soft); }
@@ -1144,8 +1144,9 @@ async function manageGroup(gname,ctx){
     <input class="add-in zh" id="grename" value="${esc(gname)}" style="width:100%;border:1.5px solid var(--accent);border-radius:10px;padding:8px 12px;margin-bottom:16px">
     <div class="dlg-m zh" style="margin-bottom:9px">颜色</div>
     <div class="gsw-grid">${swatches}</div>
-    ${ctx==='today'?`<div style="display:flex;gap:8px"><button class="dbtn cancel zh" id="gtop" style="flex:1">⤒ 移到最前</button><button class="dbtn cancel zh" id="gbot" style="flex:1">⤓ 移到最后</button></div>`:''}
-    <button class="dbtn cancel zh" id="grepeat" style="width:100%;margin-top:14px">↻ 整组设为重复…</button>
+    <div style="height:1px;background:var(--line);margin:20px 0 16px"></div>
+    ${ctx==='today'?`<div style="display:flex;gap:10px;margin-bottom:10px"><button class="dbtn cancel zh" id="gtop" style="flex:1">⤒ 移到最前</button><button class="dbtn cancel zh" id="gbot" style="flex:1">⤓ 移到最后</button></div>`:''}
+    <button class="dbtn cancel zh" id="grepeat" style="width:100%">↻ 整组设为重复…</button>
     <div class="dlg-act"><button class="dbtn cancel zh" id="gdissolve">解散组</button><button class="dbtn cancel zh" id="gdel" style="color:#c96f68;border-color:rgba(201,111,104,0.4)">删除组</button><button class="dbtn cancel zh">取消</button><button class="dbtn ok zh">保存</button></div></div>`;
   h.appendChild(ov);
   const close=()=>{h.innerHTML='';};
@@ -1517,8 +1518,8 @@ function repeatDialog(opts){ opts=opts||{}; const rule=opts.rule||null; const se
   function drawDetail(t){ const f=c.freq.type===t?c.freq:{}; const wdNow=td.getDay();
     if(t==='daily'){ det.innerHTML='<div class="rep-hint zh">每一天都会出现。</div>'; }
     else if(t==='everyN'){ det.innerHTML=`<div class="rep-row zh">每 <input id="d-n" class="rep-in" type="number" min="1" value="${f.n||2}" style="width:64px"> 天一次</div>`; }
-    else if(t==='weekly'){ const sel=f.weekdays||[wdNow]; det.innerHTML=`<div class="wd-row" id="d-wd">${[0,1,2,3,4,5,6].map(w=>`<span class="wd${sel.includes(w)?' on':''}" data-wd="${w}">${_WD[w].slice(1)}</span>`).join('')}</div><div class="rep-row zh" style="margin-top:8px">每 <input id="d-nw" class="rep-in" type="number" min="1" value="${f.n||1}" style="width:56px"> 周</div>`;
-      det.querySelectorAll('.wd').forEach(s=>s.onclick=()=>s.classList.toggle('on')); }
+    else if(t==='weekly'){ const sel=f.weekdays||[wdNow]; det.innerHTML=`<div class="rep-wd-row" id="d-wd">${[0,1,2,3,4,5,6].map(w=>`<span class="rep-wd${sel.includes(w)?' on':''}" data-wd="${w}">${_WD[w].slice(1)}</span>`).join('')}</div><div class="rep-row zh" style="margin-top:8px">每 <input id="d-nw" class="rep-in" type="number" min="1" value="${f.n||1}" style="width:56px"> 周</div>`;
+      det.querySelectorAll('.rep-wd').forEach(s=>s.onclick=()=>s.classList.toggle('on')); }
     else if(t==='monthlyDate'){ det.innerHTML=`<div class="rep-row zh">每月 <input id="d-date" class="rep-in" type="number" min="1" max="31" value="${f.date||td.getDate()}" style="width:64px"> 号<span class="rep-hint zh" style="margin-left:8px">31号会自动夹到月底</span></div>`; }
     else if(t==='monthlyLast'){ det.innerHTML='<div class="rep-hint zh">每个月的最后一天。</div>'; }
     else if(t==='monthlyNth'){ const nth=f.nth!==undefined?f.nth:2, w=f.weekday!==undefined?f.weekday:wdNow;
@@ -1541,7 +1542,7 @@ function repeatDialog(opts){ opts=opts||{}; const rule=opts.rule||null; const se
     const mode=card.querySelector('#rep-mode .on').dataset.mode;
     const ft=card.querySelector('.ftype.on').dataset.ft; let freq={type:ft};
     if(ft==='everyN'){ freq.n=Math.max(1,+card.querySelector('#d-n').value||2); }
-    else if(ft==='weekly'){ const wd=[...card.querySelectorAll('#d-wd .wd.on')].map(x=>+x.dataset.wd); if(!wd.length){toast('选至少一个星期几');return;} freq.weekdays=wd; freq.n=Math.max(1,+card.querySelector('#d-nw').value||1); }
+    else if(ft==='weekly'){ const wd=[...card.querySelectorAll('#d-wd .rep-wd.on')].map(x=>+x.dataset.wd); if(!wd.length){toast('选至少一个星期几');return;} freq.weekdays=wd; freq.n=Math.max(1,+card.querySelector('#d-nw').value||1); }
     else if(ft==='monthlyDate'){ freq.date=Math.min(31,Math.max(1,+card.querySelector('#d-date').value||1)); }
     else if(ft==='monthlyNth'){ freq.nth=+card.querySelector('#d-nth').value; freq.weekday=+card.querySelector('#d-nwd').value; }
     else if(ft==='yearly'){ freq.month=Math.min(12,Math.max(1,+card.querySelector('#d-mo').value||1))-1; freq.day=Math.min(31,Math.max(1,+card.querySelector('#d-dy').value||1)); }
