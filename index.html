@@ -149,6 +149,20 @@ body {
 .rbtn{ width:26px; height:26px; border-radius:8px; display:flex; align-items:center; justify-content:center; font-size:14px; color:var(--ink-faint); cursor:pointer; transition:all 0.15s; }
 .rbtn:hover{ background:#fdeef2; color:var(--accent-deep); }
 .rbtn.del:hover{ background:rgba(201,111,104,0.12); color:#c96f68; }
+/* 整理菜单 */
+.today-menu{ padding:6px; min-width:140px; }
+.tm-item{ font-size:14px; color:var(--ink); padding:9px 12px; border-radius:9px; cursor:pointer; transition:background 0.12s; }
+.tm-item:hover{ background:#fdeef2; color:var(--accent-deep); }
+/* 排序模式 */
+.sort-banner{ display:flex; align-items:center; justify-content:space-between; font-size:12.5px; color:var(--ink-soft); background:rgba(80,75,95,0.05); border-radius:10px; padding:8px 12px; margin-bottom:12px; }
+.sort-banner .sort-done{ color:var(--accent-deep); font-weight:600; cursor:pointer; padding:2px 10px; border-radius:999px; }
+.sort-banner .sort-done:hover{ background:var(--paper); }
+.sort-label{ font-size:11px; color:var(--ink-faint); letter-spacing:0.06em; margin:12px 2px 6px; }
+.sort-item{ display:flex; align-items:center; gap:10px; padding:7px 4px; border-bottom:1px solid var(--line); }
+.sort-num{ width:46px; text-align:center; font-family:var(--zh); font-size:14px; color:var(--ink); border:1px solid var(--line-strong); border-radius:8px; padding:5px 4px; background:var(--paper); outline:none; }
+.sort-num:focus{ border-color:var(--accent); }
+.sort-dot{ width:10px; height:10px; border-radius:50%; flex-shrink:0; }
+.sort-text{ font-size:14px; color:var(--ink); overflow:hidden; text-overflow:ellipsis; white-space:nowrap; }
 .dlabel .wd{ font-family:var(--zh); font-size:12.5px; color:var(--ink-soft); font-weight:400; margin-left:6px; }
 .dlabel .rel{ display:inline-block; font-family:var(--display); font-size:9.5px; font-weight:600; letter-spacing:0.06em;
   text-transform:uppercase; color:#fff; background:var(--accent); border-radius:999px; padding:1px 7px; margin-left:7px; vertical-align:middle; }
@@ -540,6 +554,38 @@ function groupColorIndex(name){
   if(state.groupColors && state.groupColors[name]!=null) return state.groupColors[name]%GROUP_COLORS.length;
   let h=0; for(let i=0;i<name.length;i++){ h=(h*31+name.charCodeAt(i))>>>0; } return h%GROUP_COLORS.length;
 }
+// ===== 排序 / 折叠原语 =====
+// 重排「今天」的 open 布局：无组在前(按 ungIds)，然后各组(按 grpOrder)，组内可选自定义顺序(memberOrders)。done 原样附在后面。
+function rebuildOpen(day, ungIds, grpOrder, memberOrders){
+  const open=day.entries.filter(e=>!e.done); const byId={}; open.forEach(e=>byId[e.id]=e);
+  const used=new Set(); const out=[];
+  (ungIds||[]).forEach(id=>{ const e=byId[id]; if(e&&!used.has(e)){out.push(e);used.add(e);} });
+  (grpOrder||[]).forEach(g=>{ let mem;
+    if(memberOrders&&memberOrders[g]) mem=memberOrders[g].map(id=>byId[id]).filter(Boolean);
+    else mem=open.filter(e=>e.group===g);
+    mem.forEach(e=>{ if(!used.has(e)){out.push(e);used.add(e);} }); });
+  open.forEach(e=>{ if(!used.has(e)){out.push(e);used.add(e);} }); // 兜底：没覆盖到的也别丢
+  day.entries=out.concat(day.entries.filter(e=>e.done));
+}
+function curUngIds(day){ return day.entries.filter(e=>!e.done&&!e.group).map(e=>e.id); }
+function curGroupOrder(day){ const o=[]; day.entries.filter(e=>!e.done&&e.group).forEach(e=>{ if(!o.includes(e.group))o.push(e.group); }); return o; }
+function moveInList(list, item, pos1){ const a=list.filter(x=>x!==item); let i=Math.max(0,Math.min(a.length, pos1-1)); a.splice(i,0,item); return a; }
+// 单条到顶/底（无组→无组区端点；有组→组内端点）
+function entryToEdge(id, edge){ const day=getDay(viewDate); const en=day.entries.find(e=>e.id===id); if(!en)return;
+  if(!en.group){ let u=curUngIds(day).filter(x=>x!==id); u=edge==='top'?[id,...u]:[...u,id]; rebuildOpen(day,u,curGroupOrder(day)); }
+  else { const open=day.entries.filter(e=>!e.done); const mem=open.filter(e=>e.group===en.group).map(e=>e.id).filter(x=>x!==id);
+    const nm=edge==='top'?[id,...mem]:[...mem,id]; const mo={}; mo[en.group]=nm; rebuildOpen(day,curUngIds(day),curGroupOrder(day),mo); }
+  save(); renderEntries(); toast(edge==='top'?'置顶了':'置底了'); }
+// 整组到最前/最后
+function groupToEdge(gname, edge){ const day=getDay(viewDate); let go=curGroupOrder(day).filter(g=>g!==gname); if(!day.entries.some(e=>e.group===gname&&!e.done))return;
+  go=edge==='top'?[gname,...go]:[...go,gname]; rebuildOpen(day,curUngIds(day),go); save(); renderEntries(); toast(edge==='top'?'整组移到最前':'整组移到最后'); }
+// 按编号重排（排序模式用）
+function setGroupPos(gname, pos1){ const day=getDay(viewDate); const go=moveInList(curGroupOrder(day),gname,pos1); rebuildOpen(day,curUngIds(day),go); save(); renderEntries(); }
+function setUngPos(id, pos1){ const day=getDay(viewDate); const u=moveInList(curUngIds(day),id,pos1); rebuildOpen(day,u,curGroupOrder(day)); save(); renderEntries(); }
+// 全部折叠 / 展开（仅今天的组）
+function todayGroupNames(){ return curGroupOrder(getDay(viewDate)); }
+function allGroupsCollapsed(){ const gs=todayGroupNames(); return gs.length>0 && gs.every(g=>groupFold['today:'+g]); }
+function collapseAllGroups(collapse){ todayGroupNames().forEach(g=>{ groupFold['today:'+g]=collapse; }); renderEntries(); }
 // ===== Supabase config (same project as Daily Ritual) =====
 const SUPABASE_URL='https://qhcjddtxvktuowoaemnc.supabase.co';
 const SUPABASE_KEY='sb_publishable_tRpF5o9qWkIdAjwhPatp1A_igucPgGB';
@@ -550,6 +596,7 @@ let addingEntry=false, entryTagSel=[], addingPool=false, currentView='weave', di
 let addingInGroup=null; // {ctx, gname} when adding directly inside a group
 let groupFold={}; // groupName -> bool (collapsed)
 let selectMode=null; // null | 'today' | 'pool'
+let sortMode=false; // 排序模式（今天）：显示可编辑序号
 let selectedIds=new Set();
 function fresh(){ return { tags:JSON.parse(JSON.stringify(DEFAULT_TAGS)), days:{}, pool:[], poolFold:false, groupColors:{} }; }
 function migrate(s){
@@ -921,7 +968,9 @@ function buildTagChips(item){
     tw.appendChild(c); });
   return tw;
 }
-function renderEntries(animId){ const box=document.getElementById('entries'); const day=getDay(viewDate); box.innerHTML='';
+function renderEntries(animId){ const box=document.getElementById('entries'); const day=getDay(viewDate);
+  if(sortMode){ renderSortMode(box, day); return; }
+  box.innerHTML='';
   const open=day.entries.filter(e=>!e.done);
   const done=day.entries.filter(e=>e.done);
   // --- open entries, clustered by group ---
@@ -1095,6 +1144,7 @@ async function manageGroup(gname,ctx){
     <input class="add-in zh" id="grename" value="${esc(gname)}" style="width:100%;border:1.5px solid var(--accent);border-radius:10px;padding:8px 12px;margin-bottom:16px">
     <div class="dlg-m zh" style="margin-bottom:9px">颜色</div>
     <div class="gsw-grid">${swatches}</div>
+    ${ctx==='today'?`<div style="display:flex;gap:8px"><button class="dbtn cancel zh" id="gtop" style="flex:1">⤒ 移到最前</button><button class="dbtn cancel zh" id="gbot" style="flex:1">⤓ 移到最后</button></div>`:''}
     <button class="dbtn cancel zh" id="grepeat" style="width:100%;margin-top:14px">↻ 整组设为重复…</button>
     <div class="dlg-act"><button class="dbtn cancel zh" id="gdissolve">解散组</button><button class="dbtn cancel zh" id="gdel" style="color:#c96f68;border-color:rgba(201,111,104,0.4)">删除组</button><button class="dbtn cancel zh">取消</button><button class="dbtn ok zh">保存</button></div></div>`;
   h.appendChild(ov);
@@ -1105,6 +1155,7 @@ async function manageGroup(gname,ctx){
     s.style.boxShadow='0 0 0 2px var(--paper),0 0 0 4px '+GROUP_COLORS[chosen].name; }; });
   ov.querySelector('.cancel').onclick=close; ov.onclick=e=>{if(e.target===ov)close();};
   ov.querySelector('#grepeat').onclick=()=>{ close(); applyRepeatToGroup(gname,ctx); };
+  if(ctx==='today'){ ov.querySelector('#gtop').onclick=()=>{ close(); groupToEdge(gname,'top'); }; ov.querySelector('#gbot').onclick=()=>{ close(); groupToEdge(gname,'bottom'); }; }
   ov.querySelector('.ok').onclick=()=>{ const v=ov.querySelector('#grename').value.trim();
     if(!state.groupColors)state.groupColors={};
     if(v&&v!==gname){
@@ -1374,6 +1425,7 @@ function openMovePicker(id, ctx, anchorEl){
     const mn=['1月','2月','3月','4月','5月','6月','7月','8月','9月','10月','11月','12月'];
     let html=`<div class="mv-title zh">移到…</div><div class="mv-quick">`
       +`<span class="mv-q zh" data-k="${dk(-1)}">昨天</span><span class="mv-q zh now" data-k="${dk(0)}">今天</span><span class="mv-q zh" data-k="${dk(1)}">明天</span></div>`;
+    if(ctx!=='pool') html+=`<div class="mv-quick"><span class="mv-q zh" data-edge="top">⤒ 置顶</span><span class="mv-q zh" data-edge="bottom">⤓ 置底</span></div>`;
     if(ctx!=='pool') html+=`<div class="mv-pool zh" data-pool="1">↘ 收进「以后」</div>`;
     if(ctx!=='pool') html+=`<div class="mv-pool zh" data-repeat="1">↻ 设为重复…</div>`;
     html+=`<div class="mv-div"></div><div class="cal-head"><span class="cal-nav" data-d="-1">‹</span><span class="cal-title">${y} 年 ${mn[m]}</span><span class="cal-nav" data-d="1">›</span></div><div class="cal-grid">`;
@@ -1382,7 +1434,8 @@ function openMovePicker(id, ctx, anchorEl){
     for(let d=1;d<=dim;d++){ const k=`${y}-${pad(m+1)}-${pad(d)}`; const has=state.days[k]&&state.days[k].entries&&state.days[k].entries.length>0;
       html+=`<div class="cal-cell${k===tk?' today':''}" data-k="${k}">${d}${has?'<span class="cal-dot"></span>':''}</div>`; }
     html+=`</div>`; pop.innerHTML=html;
-    pop.querySelectorAll('.mv-q').forEach(q=>q.onclick=()=>pick(q.dataset.k));
+    pop.querySelectorAll('.mv-q[data-k]').forEach(q=>q.onclick=()=>pick(q.dataset.k));
+    pop.querySelectorAll('.mv-q[data-edge]').forEach(q=>q.onclick=()=>{ h.innerHTML=''; entryToEdge(id, q.dataset.edge); });
     const mp=pop.querySelector('.mv-pool[data-pool]'); if(mp)mp.onclick=toPool;
     const mr=pop.querySelector('.mv-pool[data-repeat]'); if(mr)mr.onclick=()=>{ h.innerHTML=''; createRuleFromEntry(id); };
     pop.querySelectorAll('.cal-nav').forEach(n=>n.onclick=()=>{ pm.m+=parseInt(n.dataset.d); if(pm.m<0){pm.m=11;pm.y--;} if(pm.m>11){pm.m=0;pm.y++;} draw(); });
@@ -1555,6 +1608,44 @@ function ruleListPanel(){ const h=document.getElementById('dlghost'); h.innerHTM
 }
 // ===== multi-select mode =====
 function enterSelectMode(which){ selectMode=which; selectedIds=new Set(); renderEntries(); renderPool(); renderBatchBar(); }
+// ===== 「整理」菜单：多选 / 收起所有组 / 排序 =====
+function openTodayMenu(anchorEl){
+  const h=document.getElementById('pickhost'); h.innerHTML='';
+  const pop=document.createElement('div'); pop.className='cal-pop today-menu';
+  const collapsed=allGroupsCollapsed(); const hasGroups=todayGroupNames().length>0;
+  pop.innerHTML=`<div class="tm-item zh" data-a="select">多选移动</div>`
+    +(hasGroups?`<div class="tm-item zh" data-a="collapse">${collapsed?'展开所有组':'收起所有组'}</div>`:'')
+    +(hasGroups||day_hasUng()?`<div class="tm-item zh" data-a="sort">排序</div>`:'');
+  h.appendChild(pop);
+  pop.querySelector('[data-a="select"]').onclick=()=>{ h.innerHTML=''; enterSelectMode('today'); };
+  const cb=pop.querySelector('[data-a="collapse"]'); if(cb)cb.onclick=()=>{ h.innerHTML=''; collapseAllGroups(!collapsed); };
+  const sb=pop.querySelector('[data-a="sort"]'); if(sb)sb.onclick=()=>{ h.innerHTML=''; enterSortMode(); };
+  const a=anchorEl.getBoundingClientRect(); let top=a.bottom+8, left=a.right-150; if(left<12)left=12;
+  pop.style.top=top+'px'; pop.style.left=left+'px';
+  setTimeout(()=>{ const close=e=>{ if(!pop.contains(e.target)){h.innerHTML='';document.removeEventListener('mousedown',close);} }; document.addEventListener('mousedown',close); },0);
+}
+function day_hasUng(){ return getDay(viewDate).entries.some(e=>!e.done&&!e.group); }
+function enterSortMode(){ selectMode=null; sortMode=true; renderEntries(); }
+function renderSortMode(box, day){
+  box.innerHTML=''; const az=document.getElementById('addzone'); if(az)az.innerHTML='';
+  const open=day.entries.filter(e=>!e.done); const ung=open.filter(e=>!e.group); const go=curGroupOrder(day);
+  const banner=document.createElement('div'); banner.className='sort-banner zh';
+  banner.innerHTML=`<span>排序中 · 改数字 + 回车 调整顺序</span><span class="sort-done">完成</span>`;
+  banner.querySelector('.sort-done').onclick=()=>{ sortMode=false; renderEntries(); };
+  box.appendChild(banner);
+  const mkRow=(num,label,dotColor,onCommit)=>{ const row=document.createElement('div'); row.className='sort-item';
+    const inp=document.createElement('input'); inp.className='sort-num'; inp.type='number'; inp.min='1'; inp.value=num;
+    inp.onkeydown=(e)=>{ if(e.key==='Enter')inp.blur(); };
+    inp.onblur=()=>{ const v=parseInt(inp.value,10); if(v>=1&&v!==num)onCommit(v); };
+    row.appendChild(inp);
+    if(dotColor){ const d=document.createElement('span'); d.className='sort-dot'; d.style.background=dotColor; row.appendChild(d); }
+    const t=document.createElement('span'); t.className='sort-text zh'; t.textContent=label; row.appendChild(t); return row; };
+  if(ung.length){ if(go.length){ const l=document.createElement('div'); l.className='sort-label zh'; l.textContent='单条'; box.appendChild(l); }
+    ung.forEach((e,i)=>box.appendChild(mkRow(i+1,(e.text||'').split('\n')[0]||'（空）',null,(pos)=>setUngPos(e.id,pos)))); }
+  if(go.length){ const l=document.createElement('div'); l.className='sort-label zh'; l.textContent='分组'; box.appendChild(l);
+    go.forEach((g,i)=>{ const col=groupColor(g); const cnt=open.filter(e=>e.group===g).length; box.appendChild(mkRow(i+1,`${g}（${cnt}）`,col.line,(pos)=>setGroupPos(g,pos))); }); }
+  if(!ung.length&&!go.length){ const e=document.createElement('div'); e.className='sort-label zh'; e.textContent='今天还没有可排序的内容'; box.appendChild(e); }
+}
 function exitSelectMode(){ selectMode=null; selectedIds=new Set(); renderEntries(); renderPool(); renderBatchBar(); }
 function toggleSelect(id){ if(selectedIds.has(id))selectedIds.delete(id); else selectedIds.add(id); renderBatchBar();
   const el=document.querySelector(`[data-id="${id}"] .sel-box`); if(el)el.classList.toggle('on',selectedIds.has(id)); }
@@ -1729,7 +1820,7 @@ document.getElementById('prev').onclick=()=>{const d=parseKey(viewDate);d.setDat
 document.getElementById('next').onclick=()=>{const d=parseKey(viewDate);d.setDate(d.getDate()+1);viewDate=keyOf(d);switchDay();};
 document.getElementById('djump').onclick=()=>{viewDate=todayKey();switchDay();};
 document.getElementById('pool-head').onclick=(e)=>{ if(e.target.closest('.sec-line')||e.target.closest('.sec-tool'))return; togglePoolFold(); };
-document.getElementById('today-tool').onclick=(e)=>{ e.stopPropagation(); enterSelectMode('today'); };
+document.getElementById('today-tool').onclick=(e)=>{ e.stopPropagation(); openTodayMenu(e.currentTarget); };
 document.getElementById('pool-tool').onclick=(e)=>{ e.stopPropagation(); if(state.poolFold){state.poolFold=false;save();} enterSelectMode('pool'); };
 let calMonth=null; // {y,m} currently shown month in calendar
 document.getElementById('dlabel').onclick=()=>openCalendar();
