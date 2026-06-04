@@ -225,7 +225,7 @@ body.dragging{ cursor:grabbing; user-select:none; }
 .echeck:hover{ border-color:var(--accent); }
 .echeck.on{ background:var(--accent); border-color:var(--accent); }
 .echeck.on::after{ content:''; width:5px; height:8px; border:solid #fff; border-width:0 1.5px 1.5px 0; transform:rotate(45deg) translateY(-1px); }
-.echeck.prog{ border-color:var(--accent); background:linear-gradient(90deg, var(--accent) 0 50%, transparent 50% 100%); }
+.echeck.prog{ border-color:var(--ink-faint); background:linear-gradient(90deg, var(--ink-soft) 0 50%, transparent 50% 100%); }
 .emain{ flex:1; min-width:0; }
 .etext{ font-family:var(--zh); font-size:15px; color:var(--ink); word-break:break-word; cursor:text; }
 .etext-wrap{ display:flex; flex-direction:column; gap:2px; }
@@ -1036,7 +1036,9 @@ function buildEntry(en,anim){ const row=document.createElement('div'); row.class
   }
   const grip=document.createElement('div'); grip.className='grip'; grip.innerHTML='⋮⋮'; grip.title='拖动'; attachDrag(grip,'entry',en.id); row.appendChild(grip);
   const chk=document.createElement('div'); const _st=en.done?'done':(en.prog?'prog':'none');
-  chk.className='echeck'+(_st==='done'?' on':_st==='prog'?' prog':''); chk.title=_st==='done'?'已完成（再点取消）':_st==='prog'?'进行中（再点完成）':'点一下 → 进行中'; chk.onclick=()=>toggleDone(en.id); row.appendChild(chk);
+  chk.className='echeck'+(_st==='done'?' on':_st==='prog'?' prog':''); chk.title=_st==='done'?'已完成（再点取消）':_st==='prog'?'进行中（再点完成）':'点一下 → 进行中';
+  if(_st==='prog'){ const gc=en.group?groupColor(en.group).line:'var(--ink-soft)'; chk.style.background='linear-gradient(90deg, '+gc+' 0 50%, transparent 50% 100%)'; chk.style.borderColor=en.group?groupColor(en.group).line:'var(--ink-faint)'; }
+  chk.onclick=()=>toggleDone(en.id); row.appendChild(chk);
   const main=document.createElement('div'); main.className='emain';
   main.appendChild(buildEntryText(en, 'entry'));
   const badge=dueTimeBadge(en); if(en.rule||badge){ const meta=document.createElement('div'); meta.className='emeta';
