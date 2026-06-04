@@ -139,6 +139,7 @@ body {
 .rep-wd.on{ background:var(--accent); color:#fff; }
 /* rule list */
 .rule-list{ display:flex; flex-direction:column; gap:8px; max-height:60vh; overflow-y:auto; margin:6px 0 4px; }
+.rule-sec{ font-size:12px; color:var(--ink-faint); letter-spacing:0.04em; margin:2px 2px 2px; }
 .rule-li{ display:flex; align-items:flex-start; gap:8px; padding:10px 11px; background:rgba(255,255,255,0.6); border:1px solid var(--line); border-radius:12px; }
 .rule-li.paused{ opacity:0.55; }
 .rule-main{ flex:1; min-width:0; }
@@ -660,6 +661,8 @@ function countCompleted(rid){ let c=0; for(const dk in state.days){ (state.days[
 function genInstance(rule,dateKey,dueKey){ getDay(dateKey).entries.unshift({
   id:'e'+Date.now()+Math.random().toString(36).slice(2,5), text:rule.text, tags:[...(rule.tags||[])], group:rule.group||null,
   done:false, rule:rule.id, due:dueKey, time:rule.time||null, tz:rule.tz||null }); }
+function countAnyInstances(rid){ let c=0; for(const dk in state.days){ (state.days[dk].entries||[]).forEach(e=>{ if(e.rule===rid)c++; }); } return c; }
+const MUST_HORIZON=6; // 必达预生成未来几期真 entry
 function reconcileRules(){ if(!state.rules||!state.rules.length)return; let changed=false; const tk=todayKey();
   state.rules.forEach(rule=>{ if(rule.paused)return;
     const limD=rule.until&&rule.until.type==='date'?rule.until.date:null;
@@ -669,11 +672,22 @@ function reconcileRules(){ if(!state.rules||!state.rules.length)return; let chan
       if(limN!=null&&countCompleted(rule.id)>=limN)return;
       if(limD!=null&&rule.nextDue>limD)return;
       if(rule.nextDue<=tk){ genInstance(rule,tk,rule.nextDue); rule.nextDue=occOnOrAfter(rule.freq,addDays(tk,1)); changed=true; }
-    } else { let g=0;
-      while(rule.nextDue<=tk&&g<500){
-        if(limD!=null&&rule.nextDue>limD)break;
-        if(limN!=null&&countCompleted(rule.id)>=limN)break;
-        genInstance(rule,rule.nextDue,rule.nextDue); rule.nextDue=occOnOrAfter(rule.freq,addDays(rule.nextDue,1)); g++; changed=true; }
+    } else {
+      // 必达：维持「未来 MUST_HORIZON 期」真 entry，并补齐任何漏掉的过去期。
+      // 用 genThrough(已生成到哪个到期日的水位) 防重复生成；完成搬家后该期不再回填。
+      if(rule.genThrough===undefined){ rule.genThrough = rule.nextDue? addDays(rule.nextDue,-1) : addDays(rule.created||tk,-1); changed=true; } // 老规则迁移
+      if(rule.genCount===undefined){ rule.genCount = countAnyInstances(rule.id); changed=true; }
+      // 目标：今天之后第 MUST_HORIZON 个到期日（受 until 限制）
+      let target=tk;
+      for(let i=0;i<MUST_HORIZON;i++){ const nx=occOnOrAfter(rule.freq, addDays(target,1)); if(!nx)break; if(limD!=null&&nx>limD)break; target=nx; }
+      const stop = target>tk? target : tk; // 至少回填到今天
+      let cur=occOnOrAfter(rule.freq, addDays(rule.genThrough,1)); let g=0;
+      while(cur && cur<=stop && g<366){
+        if(limD!=null&&cur>limD)break;
+        if(limN!=null&&rule.genCount>=limN)break;
+        genInstance(rule,cur,cur); rule.genCount++; rule.genThrough=cur; changed=true; g++;
+        cur=occOnOrAfter(rule.freq, addDays(cur,1));
+      }
     }
   });
   if(changed)save(); }
@@ -1101,11 +1115,16 @@ function buildEntry(en,anim){ const row=document.createElement('div'); row.class
   const tg=document.createElement('button'); tg.className='mbtn'; tg.innerHTML='⊕'; tg.title='标签'; tg.onclick=()=>retag(en.id,row);
   const dl=document.createElement('button'); dl.className='mbtn'; dl.innerHTML='×'; dl.title='删除'; dl.onclick=()=>removeEntry(en.id);
   acts.appendChild(cp);acts.appendChild(mv);acts.appendChild(gp);acts.appendChild(tg);acts.appendChild(dl);row.appendChild(acts); return row; }
-function toggleDone(id){ const day=getDay(viewDate); const en=day.entries.find(e=>e.id===id); if(!en)return;
+function toggleDone(id){ const day=getDay(viewDate); const idx=day.entries.findIndex(e=>e.id===id); if(idx<0)return; const en=day.entries[idx];
   if(en.done){ en.done=false; en.prog=false; }        // ✓ → 空
   else if(en.prog){ en.prog=false; en.done=true; }     // ◐ → ✓
   else { en.prog=true; }                               // 空 → ◐进行中
-  save(); renderEntries(); renderViews(); }
+  // ii：必达的某期被完成时，搬到「今天」并记在今天（你哪天做的就记哪天）。该期的到期日已在水位内，不会再回填。
+  let moved=false;
+  if(en.done && en.rule){ const rule=(state.rules||[]).find(r=>r.id===en.rule);
+    if(rule && rule.mode==='must'){ const tk=todayKey(); if(viewDate!==tk){ day.entries.splice(idx,1); getDay(tk).entries.unshift(en); moved=true; } } }
+  save(); renderEntries(); renderViews();
+  if(moved) toast('已完成 · 记在今天'); }
 // existing group names in a given context
 function existingGroupsIn(ctx){ const set=[]; const arr=ctx==='pool'?state.pool:getDay(viewDate).entries; arr.forEach(e=>{ if(e.group&&!set.includes(e.group))set.push(e.group); }); return set; }
 function existingGroups(){ return existingGroupsIn('today'); }
@@ -1559,10 +1578,11 @@ function repeatDialog(opts){ opts=opts||{}; const rule=opts.rule||null; const se
 function createRuleFromEntry(id){ const day=getDay(viewDate); const idx=day.entries.findIndex(e=>e.id===id); if(idx<0)return; const en=day.entries[idx];
   repeatDialog({ seed:{text:en.text,tags:en.tags,group:en.group}, onSave:(cfg)=>{
     const created=todayKey(); const freq=cfg.freq; if(freq.type==='everyN'||freq.type==='weekly')freq.anchor=created;
+    const firstDue=occOnOrAfter(freq,created);
     const rule={id:'r'+Date.now()+Math.random().toString(36).slice(2,5), text:en.text, tags:[...(en.tags||[])], group:en.group||null,
-      mode:cfg.mode, freq, time:cfg.time, tz:cfg.tz, until:cfg.until, paused:false, created, nextDue:occOnOrAfter(freq,created) };
+      mode:cfg.mode, freq, time:cfg.time, tz:cfg.tz, until:cfg.until, paused:false, created, nextDue:firstDue, genThrough:addDays(created,-1), genCount:0 };
     state.rules.push(rule); day.entries.splice(idx,1); reconcileRules(); save(); renderEntries(); renderViews();
-    toast('设为重复 · '+freqLabel(freq)); }});
+    toast('设为重复 · 下次 '+dayLabel(firstDue)+(cfg.mode==='must'?' 起，已排进未来':'')); }});
 }
 function applyRepeatToGroup(gname,ctx){ ctx=ctx||'today'; const arr=ctx==='pool'?state.pool:getDay(viewDate).entries;
   const members=arr.filter(e=>e.group===gname&&(ctx==='pool'||!e.done)); if(!members.length){toast('这组没有可设的事');return;}
@@ -1570,32 +1590,40 @@ function applyRepeatToGroup(gname,ctx){ ctx=ctx||'today'; const arr=ctx==='pool'
     const created=todayKey();
     members.forEach(m=>{ const freq=JSON.parse(JSON.stringify(cfg.freq)); if(freq.type==='everyN'||freq.type==='weekly')freq.anchor=created;
       state.rules.push({id:'r'+Date.now()+Math.random().toString(36).slice(2,5)+(''+m.id).slice(-3), text:m.text, tags:[...(m.tags||[])], group:gname,
-        mode:cfg.mode, freq, time:cfg.time, tz:cfg.tz, until:cfg.until?JSON.parse(JSON.stringify(cfg.until)):null, paused:false, created, nextDue:occOnOrAfter(freq,created) }); });
+        mode:cfg.mode, freq, time:cfg.time, tz:cfg.tz, until:cfg.until?JSON.parse(JSON.stringify(cfg.until)):null, paused:false, created, nextDue:occOnOrAfter(freq,created), genThrough:addDays(created,-1), genCount:0 }); });
     if(ctx==='pool') state.pool=state.pool.filter(e=>e.group!==gname);
     else { const day=getDay(viewDate); day.entries=day.entries.filter(e=>!(e.group===gname&&!e.done)); }
     reconcileRules(); save(); renderEntries(); renderPool(); renderViews();
     toast(`「${gname}」整组设为重复 · ${freqLabel(cfg.freq)}`); }});
 }
 function editRule(rid){ const rule=state.rules.find(r=>r.id===rid); if(!rule)return;
-  repeatDialog({ rule, onSave:(cfg)=>{ const freqChanged=JSON.stringify(rule.freq)!==JSON.stringify(cfg.freq);
+  repeatDialog({ rule, onSave:(cfg)=>{ const freqChanged=JSON.stringify(rule.freq)!==JSON.stringify(cfg.freq); const modeChanged=rule.mode!==cfg.mode;
     rule.mode=cfg.mode; rule.time=cfg.time; rule.tz=cfg.tz; rule.until=cfg.until;
     if(freqChanged){ const freq=cfg.freq; if(freq.type==='everyN'||freq.type==='weekly')freq.anchor=rule.created||todayKey(); rule.freq=freq; rule.nextDue=occOnOrAfter(freq,todayKey()); }
+    if(freqChanged||modeChanged){ // 清掉按旧设定预生成、还没做的未来实例；重置必达水位，让 reconcile 用新设定重排未来
+      const tk=todayKey();
+      for(const dk in state.days){ if(dk>tk){ const d=state.days[dk]; d.entries=(d.entries||[]).filter(e=>!(e.rule===rid&&!e.done)); } }
+      rule.genThrough=addDays(tk,-1); rule.genCount=countAnyInstances(rid); }
     save(); reconcileRules(); renderEntries(); renderViews(); ruleListPanel(); toast('规则已更新（只影响以后生成的）'); }});
 }
 function ruleListPanel(){ const h=document.getElementById('dlghost'); h.innerHTML='';
   const ov=document.createElement('div'); ov.className='ov';
   const card=document.createElement('div'); card.className='dlg rep-dlg';
   const rules=state.rules||[];
-  let body = rules.length? rules.map(r=>{
-    const done=countCompleted(r.id); const paused=r.paused;
+  const liHTML=(r)=>{ const done=countCompleted(r.id); const paused=r.paused;
     const next = paused?'已暂停':(r.nextDue?`下次 ${dayLabel(r.nextDue)}`:'—');
     const untilTxt = r.until? (r.until.type==='date'?` · 到 ${r.until.date}`:` · 满 ${r.until.n} 次停`):'';
     return `<div class="rule-li${paused?' paused':''}" data-r="${r.id}">
       <div class="rule-main"><div class="rule-txt zh">${esc(r.text)}</div>
-        <div class="rule-meta zh">${r.mode==='must'?'📅 必达':'🌱 随缘'} · ${esc(freqLabel(r.freq))}${r.time?' · ⏰'+r.time:''}${untilTxt}</div>
+        <div class="rule-meta zh">${esc(freqLabel(r.freq))}${r.time?' · ⏰'+r.time:''}${untilTxt}</div>
         <div class="rule-meta2 zh">${next} · 已完成 ${done} 次</div></div>
-      <div class="rule-acts"><span class="rbtn" data-act="pause" title="${paused?'恢复':'暂停'}">${paused?'▶':'⏸'}</span><span class="rbtn" data-act="edit" title="编辑">✎</span><span class="rbtn del" data-act="del" title="删除规则">×</span></div></div>`;
-  }).join('') : '<div class="rep-hint zh" style="padding:18px 4px">还没有重复任务。在任意一条事的 ↪ 里选「设为重复」。</div>';
+      <div class="rule-acts"><span class="rbtn" data-act="pause" title="${paused?'恢复':'暂停'}">${paused?'▶':'⏸'}</span><span class="rbtn" data-act="edit" title="编辑">✎</span><span class="rbtn del" data-act="del" title="删除规则">×</span></div></div>`; };
+  const must=rules.filter(r=>r.mode==='must').sort((a,b)=>(a.nextDue||'').localeCompare(b.nextDue||''));
+  const flow=rules.filter(r=>r.mode!=='must'); // 随缘按创建序（数组原序）
+  let body='';
+  if(must.length){ body+=`<div class="rule-sec zh">📅 必达 · 每期都会出现</div>`+must.map(liHTML).join(''); }
+  if(flow.length){ body+=`<div class="rule-sec zh"${must.length?' style="margin-top:16px"':''}>🌱 随缘 · 漏了算了</div>`+flow.map(liHTML).join(''); }
+  if(!rules.length) body='<div class="rep-hint zh" style="padding:18px 4px">还没有重复任务。在任意一条事的 ↪ 里选「设为重复」。</div>';
   card.innerHTML=`<div class="dlg-t zh">重复任务</div><div class="rule-list">${body}</div><div class="dlg-act"><button class="dbtn ok zh" id="rl-close">关闭</button></div>`;
   ov.appendChild(card); h.appendChild(ov);
   const close=()=>{h.innerHTML='';}; ov.onclick=e=>{if(e.target===ov)close();}; card.querySelector('#rl-close').onclick=close;
@@ -1604,8 +1632,9 @@ function ruleListPanel(){ const h=document.getElementById('dlghost'); h.innerHTM
       const rule=state.rules.find(r=>r.id===rid); if(!rule)return;
       if(act==='pause'){ rule.paused=!rule.paused; save(); ruleListPanel(); }
       else if(act==='edit'){ close(); editRule(rid); }
-      else if(act==='del'){ const ok=await dialog({title:'删除这条重复规则？',msg:'以后不再自动生成；已经出现过的照样留着、不动。',ok:'删除规则',cancel:'取消'}); if(!ok)return;
-        state.rules=state.rules.filter(r=>r.id!==rid); save(); ruleListPanel(); } }); });
+      else if(act==='del'){ const ok=await dialog({title:'删除这条重复规则？',msg:'以后不再自动生成；已经出现过的照样留着、未来还没做的会清掉。',ok:'删除规则',cancel:'取消'}); if(!ok)return;
+        const tk=todayKey(); for(const dk in state.days){ if(dk>tk){ const d=state.days[dk]; d.entries=(d.entries||[]).filter(e=>!(e.rule===rid&&!e.done)); } }
+        state.rules=state.rules.filter(r=>r.id!==rid); save(); renderEntries(); renderViews(); ruleListPanel(); } }); });
 }
 // ===== multi-select mode =====
 function enterSelectMode(which){ selectMode=which; selectedIds=new Set(); renderEntries(); renderPool(); renderBatchBar(); }
