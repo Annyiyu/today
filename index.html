@@ -599,7 +599,7 @@ let groupFold={}; // groupName -> bool (collapsed)
 let selectMode=null; // null | 'today' | 'pool'
 let sortMode=false; // 排序模式（今天）：显示可编辑序号
 let selectedIds=new Set();
-function fresh(){ return { tags:JSON.parse(JSON.stringify(DEFAULT_TAGS)), days:{}, pool:[], poolFold:false, groupColors:{} }; }
+function fresh(){ return { tags:JSON.parse(JSON.stringify(DEFAULT_TAGS)), days:{}, pool:[], poolFold:false, groupColors:{}, rules:[], groupRepeat:{} }; }
 function migrate(s){
   if(!Array.isArray(s.tags)||!s.tags.length) s.tags=JSON.parse(JSON.stringify(DEFAULT_TAGS));
   if(!s.days) s.days={}; if(!Array.isArray(s.pool)) s.pool=[];
@@ -611,6 +611,10 @@ function migrate(s){
   if(typeof s.poolFold!=='boolean') s.poolFold=false;
   if(!s.groupColors||typeof s.groupColors!=='object') s.groupColors={};
   if(!Array.isArray(s.rules)) s.rules=[]; // 重复规则
+  if(!s.groupRepeat||typeof s.groupRepeat!=='object') s.groupRepeat={}; // 组的默认重复设置（组的"重复身份"）
+  // 反推迁移：现有重复组（成员已有规则、但组还没"身份"）补一个默认，让它能自动继承 + 不再双建
+  s.rules.forEach(r=>{ if(r.group && !s.groupRepeat[r.group]){ const f=JSON.parse(JSON.stringify(r.freq||{})); delete f.anchor;
+    s.groupRepeat[r.group]={ mode:r.mode||'flow', freq:f, time:r.time||null, tz:r.tz||null, until:r.until||null }; } });
   return s;
 }
 // ===== carry forward: 没打勾、没删、没挪「以后」的事，永远跟到今天 =====
@@ -1049,7 +1053,10 @@ function buildGroupAddRow(ctx, gname, groupItems, col){
         const last=groupItems[groupItems.length-1];
         const carriedTags=last&&last.tags?[...last.tags]:[];
         if(ctx==='pool'){ state.pool.push({id:'p'+Date.now(),text:v,tags:carriedTags,group:gname}); }
-        else { getDay(viewDate).entries.push({id:'e'+Date.now(),text:v,tags:carriedTags,group:gname,done:false}); }
+        else { const ne={id:'e'+Date.now(),text:v,tags:carriedTags,group:gname,done:false}; getDay(viewDate).entries.push(ne);
+          if(state.groupRepeat && state.groupRepeat[gname]){ // 组有重复身份 → 新成员自动继承
+            const rule=ruleFromTemplate(state.groupRepeat[gname], v, carriedTags, gname); state.rules.push(rule);
+            const a=getDay(viewDate).entries; const i=a.indexOf(ne); if(i>=0)a.splice(i,1); reconcileRules(); } }
         save();
       }
       addingInGroup = (v&&keep) ? {ctx,gname} : null; // keep adding more if Enter
@@ -1158,6 +1165,7 @@ async function manageGroup(gname,ctx){
   const h=document.getElementById('dlghost'); h.innerHTML='';
   const ov=document.createElement('div'); ov.className='ov';
   const curIdx=groupColorIndex(gname);
+  const hasRep = !!(state.groupRepeat && state.groupRepeat[gname]);
   const swatches=GROUP_COLORS.map((c,i)=>`<span class="gsw" data-i="${i}" style="background:${c.line};${i===curIdx?'box-shadow:0 0 0 2px var(--paper),0 0 0 4px '+c.name:''}"></span>`).join('');
   ov.innerHTML=`<div class="dlg"><div class="dlg-t zh">组「${esc(gname)}」</div>
     <input class="add-in zh" id="grename" value="${esc(gname)}" style="width:100%;border:1.5px solid var(--accent);border-radius:10px;padding:8px 12px;margin-bottom:16px">
@@ -1165,7 +1173,8 @@ async function manageGroup(gname,ctx){
     <div class="gsw-grid">${swatches}</div>
     <div style="height:1px;background:var(--line);margin:20px 0 16px"></div>
     ${ctx==='today'?`<div style="display:flex;gap:10px;margin-bottom:10px"><button class="dbtn cancel zh" id="gtop" style="flex:1">⤒ 移到最前</button><button class="dbtn cancel zh" id="gbot" style="flex:1">⤓ 移到最后</button></div>`:''}
-    <button class="dbtn cancel zh" id="grepeat" style="width:100%">↻ 整组设为重复…</button>
+    <button class="dbtn cancel zh" id="grepeat" style="width:100%">${hasRep?'↻ 编辑整组重复':'↻ 整组设为重复…'}</button>
+    ${hasRep?`<button class="dbtn cancel zh" id="grepcancel" style="width:100%;margin-top:8px;color:#c96f68;border-color:rgba(201,111,104,0.4)">取消整组重复</button>`:''}
     <div class="dlg-act"><button class="dbtn cancel zh" id="gdissolve">解散组</button><button class="dbtn cancel zh" id="gdel" style="color:#c96f68;border-color:rgba(201,111,104,0.4)">删除组</button><button class="dbtn cancel zh">取消</button><button class="dbtn ok zh">保存</button></div></div>`;
   h.appendChild(ov);
   const close=()=>{h.innerHTML='';};
@@ -1175,6 +1184,7 @@ async function manageGroup(gname,ctx){
     s.style.boxShadow='0 0 0 2px var(--paper),0 0 0 4px '+GROUP_COLORS[chosen].name; }; });
   ov.querySelector('.cancel').onclick=close; ov.onclick=e=>{if(e.target===ov)close();};
   ov.querySelector('#grepeat').onclick=()=>{ close(); applyRepeatToGroup(gname,ctx); };
+  if(hasRep){ const gc=ov.querySelector('#grepcancel'); if(gc)gc.onclick=async()=>{ close(); const ok=await dialog({title:`取消「${gname}」整组重复?`,msg:'以后不再自动生成；今天还没做的变回普通条目、历史保留。',ok:'取消重复',cancel:'返回'}); if(ok)cancelGroupRepeat(gname); }; }
   if(ctx==='today'){ ov.querySelector('#gtop').onclick=()=>{ close(); groupToEdge(gname,'top'); }; ov.querySelector('#gbot').onclick=()=>{ close(); groupToEdge(gname,'bottom'); }; }
   ov.querySelector('.ok').onclick=()=>{ const v=ov.querySelector('#grename').value.trim();
     if(!state.groupColors)state.groupColors={};
@@ -1188,10 +1198,17 @@ async function manageGroup(gname,ctx){
       // 颜色映射迁移
       if(state.groupColors[gname]!=null){ state.groupColors[v]=state.groupColors[gname]; delete state.groupColors[gname]; }
       state.groupColors[v]=chosen;
+      // 成员规则的组名 + 组的重复身份 跟着迁
+      (state.rules||[]).forEach(r=>{ if(r.group===gname)r.group=v; });
+      if(state.groupRepeat&&state.groupRepeat[gname]){ state.groupRepeat[v]=state.groupRepeat[gname]; delete state.groupRepeat[gname]; }
     }
     else { state.groupColors[gname]=chosen; }
     save(); close(); rerender(); };
-  ov.querySelector('#gdissolve').onclick=async()=>{ close(); const ok=await dialog({title:`解散组「${gname}」?`,msg:'组里的每一条记录都会<b>保留</b>，只是不再归在一起了。',ok:'解散',cancel:'取消'}); if(!ok)return; arr.forEach(e=>{if(e.group===gname)e.group=null;}); save(); rerender(); };
+  ov.querySelector('#gdissolve').onclick=async()=>{ close(); const ok=await dialog({title:`解散组「${gname}」?`,msg:'组里的每一条记录都会<b>保留</b>，只是不再归在一起了（重复设置也跟着各自保留）。',ok:'解散',cancel:'取消'}); if(!ok)return;
+    arr.forEach(e=>{if(e.group===gname)e.group=null;});
+    (state.rules||[]).forEach(r=>{ if(r.group===gname)r.group=null; }); // 成员规则保留，只去掉分组关联
+    if(state.groupRepeat)delete state.groupRepeat[gname]; // 组没了，身份也没了（成员各自的规则还在）
+    save(); rerender(); };
   ov.querySelector('#gdel').onclick=async()=>{ close();
     const openN=arr.filter(e=>e.group===gname&&!e.done).length;
     const doneN=arr.filter(e=>e.group===gname&&e.done).length;
@@ -1447,7 +1464,8 @@ function openMovePicker(id, ctx, anchorEl){
       +`<span class="mv-q zh" data-k="${dk(-1)}">昨天</span><span class="mv-q zh now" data-k="${dk(0)}">今天</span><span class="mv-q zh" data-k="${dk(1)}">明天</span></div>`;
     if(ctx!=='pool') html+=`<div class="mv-quick"><span class="mv-q zh" data-edge="top">⤒ 置顶</span><span class="mv-q zh" data-edge="bottom">⤓ 置底</span></div>`;
     if(ctx!=='pool') html+=`<div class="mv-pool zh" data-pool="1">↘ 收进「以后」</div>`;
-    if(ctx!=='pool') html+=`<div class="mv-pool zh" data-repeat="1">↻ 设为重复…</div>`;
+    const _en=ctx==='pool'?null:getDay(viewDate).entries.find(e=>e.id===id);
+    if(ctx!=='pool') html+= (_en&&_en.rule) ? `<div class="mv-pool zh" data-cancelrep="1">↻ 取消重复</div>` : `<div class="mv-pool zh" data-repeat="1">↻ 设为重复…</div>`;
     html+=`<div class="mv-div"></div><div class="cal-head"><span class="cal-nav" data-d="-1">‹</span><span class="cal-title">${y} 年 ${mn[m]}</span><span class="cal-nav" data-d="1">›</span></div><div class="cal-grid">`;
     ['一','二','三','四','五','六','日'].forEach(w=>html+=`<div class="cal-wd">${w}</div>`);
     for(let i=0;i<startDow;i++) html+=`<div class="cal-cell empty"></div>`;
@@ -1458,6 +1476,7 @@ function openMovePicker(id, ctx, anchorEl){
     pop.querySelectorAll('.mv-q[data-edge]').forEach(q=>q.onclick=()=>{ h.innerHTML=''; entryToEdge(id, q.dataset.edge); });
     const mp=pop.querySelector('.mv-pool[data-pool]'); if(mp)mp.onclick=toPool;
     const mr=pop.querySelector('.mv-pool[data-repeat]'); if(mr)mr.onclick=()=>{ h.innerHTML=''; createRuleFromEntry(id); };
+    const mc=pop.querySelector('.mv-pool[data-cancelrep]'); if(mc)mc.onclick=()=>{ h.innerHTML=''; cancelEntryRepeat(id); };
     pop.querySelectorAll('.cal-nav').forEach(n=>n.onclick=()=>{ pm.m+=parseInt(n.dataset.d); if(pm.m<0){pm.m=11;pm.y--;} if(pm.m>11){pm.m=0;pm.y++;} draw(); });
     pop.querySelectorAll('.cal-cell[data-k]').forEach(c=>c.onclick=()=>pick(c.dataset.k)); }
   draw(); h.appendChild(pop);
@@ -1504,7 +1523,7 @@ function repeatDialog(opts){ opts=opts||{}; const rule=opts.rule||null; const se
   const c = rule ? JSON.parse(JSON.stringify(rule)) : { text:(seed&&seed.text)||'', mode:'flow', freq:{type:'daily'}, time:null, tz:null, until:null };
   if(!c.freq) c.freq={type:'daily'};
   const card=document.createElement('div'); card.className='dlg rep-dlg';
-  const title = groupName?`整组「${esc(groupName)}」设为重复` : (rule?'编辑重复':'设为重复');
+  const title = groupName?`整组「${esc(groupName)}」${opts.isGroupEdit?'重复（编辑）':'设为重复'}` : (rule?'编辑重复':'设为重复');
   const sub = groupName?`组里 ${opts.memberCount} 件，每件各自按同一节奏重复` : (c.text?esc(c.text):'');
   card.innerHTML=`<div class="dlg-t zh">${title}</div>${sub?`<div class="rep-sub zh">${sub}</div>`:''}
     <div class="rep-lab zh">没做完时</div>
@@ -1584,17 +1603,41 @@ function createRuleFromEntry(id){ const day=getDay(viewDate); const idx=day.entr
     state.rules.push(rule); day.entries.splice(idx,1); reconcileRules(); save(); renderEntries(); renderViews();
     toast('设为重复 · 下次 '+dayLabel(firstDue)+(cfg.mode==='must'?' 起，已排进未来':'')); }});
 }
-function applyRepeatToGroup(gname,ctx){ ctx=ctx||'today'; const arr=ctx==='pool'?state.pool:getDay(viewDate).entries;
-  const members=arr.filter(e=>e.group===gname&&(ctx==='pool'||!e.done)); if(!members.length){toast('这组没有可设的事');return;}
-  repeatDialog({ groupName:gname, memberCount:members.length, onSave:(cfg)=>{
-    const created=todayKey();
-    members.forEach(m=>{ const freq=JSON.parse(JSON.stringify(cfg.freq)); if(freq.type==='everyN'||freq.type==='weekly')freq.anchor=created;
-      state.rules.push({id:'r'+Date.now()+Math.random().toString(36).slice(2,5)+(''+m.id).slice(-3), text:m.text, tags:[...(m.tags||[])], group:gname,
-        mode:cfg.mode, freq, time:cfg.time, tz:cfg.tz, until:cfg.until?JSON.parse(JSON.stringify(cfg.until)):null, paused:false, created, nextDue:occOnOrAfter(freq,created), genThrough:addDays(created,-1), genCount:0 }); });
-    if(ctx==='pool') state.pool=state.pool.filter(e=>e.group!==gname);
-    else { const day=getDay(viewDate); day.entries=day.entries.filter(e=>!(e.group===gname&&!e.done)); }
-    reconcileRules(); save(); renderEntries(); renderPool(); renderViews();
-    toast(`「${gname}」整组设为重复 · ${freqLabel(cfg.freq)}`); }});
+function _stripAnchor(freq){ const f=JSON.parse(JSON.stringify(freq||{})); delete f.anchor; return f; }
+function ruleFromTemplate(tmpl, text, tags, group){ const created=todayKey(); const freq=_stripAnchor(tmpl.freq);
+  if(freq.type==='everyN'||freq.type==='weekly')freq.anchor=created;
+  return { id:'r'+Date.now()+Math.random().toString(36).slice(2,5)+Math.floor(Math.random()*900),
+    text, tags:[...(tags||[])], group:group||null, mode:tmpl.mode||'flow', freq, time:tmpl.time||null, tz:tmpl.tz||null,
+    until:tmpl.until?JSON.parse(JSON.stringify(tmpl.until)):null, paused:false, created, nextDue:occOnOrAfter(freq,created), genThrough:addDays(created,-1), genCount:0 }; }
+// 取消单条重复：这条变回普通 entry、删它的规则、清未来未完成实例；历史(已完成/过去)保留
+function cancelEntryRepeat(id){ const day=getDay(viewDate); const en=day.entries.find(e=>e.id===id); if(!en||!en.rule)return;
+  const rid=en.rule; const tk=todayKey();
+  delete en.rule; delete en.due; en.time=null; en.tz=null; // 当前这条变普通
+  for(const dk in state.days){ if(dk>tk){ const d=state.days[dk]; d.entries=(d.entries||[]).filter(e=>!(e.rule===rid&&!e.done)); } } // 清未来未完成
+  state.rules=(state.rules||[]).filter(r=>r.id!==rid);
+  save(); renderEntries(); renderViews(); toast('已取消这条的重复'); }
+// 取消整组重复：清组的重复身份 + 停成员相关规则；今天未完成的变普通留着，历史保留
+function cancelGroupRepeat(gname){ const tk=todayKey(); const rids=(state.rules||[]).filter(r=>r.group===gname).map(r=>r.id);
+  for(const dk in state.days){ const d=state.days[dk]; if(dk>tk){ d.entries=(d.entries||[]).filter(e=>!(rids.includes(e.rule)&&!e.done)); }
+    (d.entries||[]).forEach(e=>{ if(rids.includes(e.rule)&&!e.done&&dk<=tk){ delete e.rule; delete e.due; e.time=null; e.tz=null; } }); }
+  state.rules=(state.rules||[]).filter(r=>!rids.includes(r.id));
+  if(state.groupRepeat)delete state.groupRepeat[gname];
+  save(); renderEntries(); renderPool(); renderViews(); toast(`已取消「${gname}」的整组重复`); }
+function applyRepeatToGroup(gname,ctx){ ctx=ctx||'today';
+  const existing = state.groupRepeat && state.groupRepeat[gname];
+  const arr=ctx==='pool'?state.pool:getDay(viewDate).entries;
+  const members=arr.filter(e=>e.group===gname&&(ctx==='pool'||!e.done));
+  repeatDialog({ groupName:gname, memberCount:members.length, rule: existing?{mode:existing.mode,freq:existing.freq,time:existing.time,tz:existing.tz,until:existing.until}:null, isGroupEdit:!!existing,
+    onSave:(cfg)=>{
+      if(!state.groupRepeat)state.groupRepeat={};
+      state.groupRepeat[gname]={ mode:cfg.mode, freq:_stripAnchor(cfg.freq), time:cfg.time, tz:cfg.tz, until:cfg.until };
+      const tmpl=state.groupRepeat[gname];
+      const targets=members.filter(m=>!m.rule); // 只给「还没有自己规则」的成员建（避免双建；个人规则优先）
+      const container=ctx==='pool'?state.pool:getDay(viewDate).entries;
+      targets.forEach(m=>{ const rule=ruleFromTemplate(tmpl, m.text, m.tags, gname); state.rules.push(rule);
+        const i=container.indexOf(m); if(i>=0)container.splice(i,1); }); // 交给规则接管，reconcile 重新生成
+      reconcileRules(); save(); renderEntries(); renderPool(); renderViews();
+      toast(existing?`「${gname}」整组重复已更新`:`「${gname}」整组设为重复`); }});
 }
 function editRule(rid){ const rule=state.rules.find(r=>r.id===rid); if(!rule)return;
   repeatDialog({ rule, onSave:(cfg)=>{ const freqChanged=JSON.stringify(rule.freq)!==JSON.stringify(cfg.freq); const modeChanged=rule.mode!==cfg.mode;
