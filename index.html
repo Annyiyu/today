@@ -140,6 +140,12 @@ body {
 /* rule list */
 .rule-list{ display:flex; flex-direction:column; gap:8px; max-height:60vh; overflow-y:auto; margin:6px 0 4px; }
 .rule-sec{ font-size:12px; color:var(--ink-faint); letter-spacing:0.04em; margin:2px 2px 2px; }
+.gm-li{ display:flex; align-items:center; gap:11px; padding:11px; background:rgba(255,255,255,0.6); border:1px solid var(--line); border-radius:12px; cursor:pointer; transition:all 0.15s; }
+.gm-li:hover{ border-color:var(--accent); }
+.gm-main{ flex:1; min-width:0; }
+.gm-name{ font-size:14.5px; color:var(--ink); }
+.gm-meta{ font-size:11.5px; color:var(--ink-faint); margin-top:2px; }
+.gm-go{ font-size:12px; color:var(--ink-faint); flex-shrink:0; }
 .rule-li{ display:flex; align-items:flex-start; gap:8px; padding:10px 11px; background:rgba(255,255,255,0.6); border:1px solid var(--line); border-radius:12px; }
 .rule-li.paused{ opacity:0.55; }
 .rule-main{ flex:1; min-width:0; }
@@ -599,7 +605,7 @@ let groupFold={}; // groupName -> bool (collapsed)
 let selectMode=null; // null | 'today' | 'pool'
 let sortMode=false; // 排序模式（今天）：显示可编辑序号
 let selectedIds=new Set();
-function fresh(){ return { tags:JSON.parse(JSON.stringify(DEFAULT_TAGS)), days:{}, pool:[], poolFold:false, groupColors:{}, rules:[], groupRepeat:{} }; }
+function fresh(){ return { tags:JSON.parse(JSON.stringify(DEFAULT_TAGS)), days:{}, pool:[], poolFold:false, groupColors:{}, rules:[], groupRepeat:{}, groups:[] }; }
 function migrate(s){
   if(!Array.isArray(s.tags)||!s.tags.length) s.tags=JSON.parse(JSON.stringify(DEFAULT_TAGS));
   if(!s.days) s.days={}; if(!Array.isArray(s.pool)) s.pool=[];
@@ -615,6 +621,14 @@ function migrate(s){
   // 反推迁移：现有重复组（成员已有规则、但组还没"身份"）补一个默认，让它能自动继承 + 不再双建
   s.rules.forEach(r=>{ if(r.group && !s.groupRepeat[r.group]){ const f=JSON.parse(JSON.stringify(r.freq||{})); delete f.anchor;
     s.groupRepeat[r.group]={ mode:r.mode||'flow', freq:f, time:r.time||null, tz:r.tz||null, until:r.until||null }; } });
+  // 组花名册：组名独立于"当下有没有 entry"而长期登记在册。收集所有出现过的组名。
+  if(!Array.isArray(s.groups)) s.groups=[];
+  const seen=new Set(s.groups);
+  const reg=(n)=>{ if(n&&!seen.has(n)){ s.groups.push(n); seen.add(n); } };
+  for(const k in s.days){ (s.days[k].entries||[]).forEach(e=>reg(e.group)); }
+  (s.pool||[]).forEach(e=>reg(e.group));
+  Object.keys(s.groupColors||{}).forEach(reg);
+  Object.keys(s.groupRepeat||{}).forEach(reg);
   return s;
 }
 // ===== carry forward: 没打勾、没删、没挪「以后」的事，永远跟到今天 =====
@@ -1133,8 +1147,7 @@ function toggleDone(id){ const day=getDay(viewDate); const idx=day.entries.findI
   save(); renderEntries(); renderViews();
   if(moved) toast('已完成 · 记在今天'); }
 // existing group names in a given context
-function existingGroupsIn(ctx){ const set=[]; const arr=ctx==='pool'?state.pool:getDay(viewDate).entries; arr.forEach(e=>{ if(e.group&&!set.includes(e.group))set.push(e.group); }); return set; }
-function existingGroups(){ return existingGroupsIn('today'); }
+function ensureGroup(name){ if(!name)return; if(!Array.isArray(state.groups))state.groups=[]; if(!state.groups.includes(name))state.groups.push(name); }
 function assignGroup(id){ assignGroupCtx(id,'today'); }
 function assignGroupPool(id){ assignGroupCtx(id,'pool'); }
 function assignGroupCtx(id,ctx){
@@ -1143,8 +1156,8 @@ function assignGroupCtx(id,ctx){
   const rerender=()=>{ ctx==='pool'?renderPool():renderEntries(); };
   const h=document.getElementById('dlghost'); h.innerHTML='';
   const ov=document.createElement('div'); ov.className='ov';
-  const groups=existingGroupsIn(ctx);
-  const chips=groups.map(g=>`<span class="gpick-opt zh" data-g="${esc(g)}" style="${en.group===g?'background:var(--accent);color:#fff;border-color:var(--accent)':''}">${esc(g)}</span>`).join('');
+  const groups=(state.groups||[]); // 从花名册选，不靠记忆默写
+  const chips=groups.map(g=>{ const col=groupColor(g); const on=en.group===g; return `<span class="gpick-opt zh" data-g="${esc(g)}" style="${on?'background:'+col.line+';color:#fff;border-color:'+col.line:'border-color:'+col.line+';color:'+col.name}">${esc(g)}</span>`; }).join('');
   ov.innerHTML=`<div class="dlg"><div class="dlg-t zh">归到一组</div>
     <div class="dlg-m zh" style="margin-bottom:12px">把「${esc(en.text)}」放进一个组里，方便把一系列的事情放在一起看。</div>
     ${groups.length?`<div style="display:flex;flex-wrap:wrap;gap:6px;margin-bottom:14px">${chips}</div>`:''}
@@ -1152,12 +1165,16 @@ function assignGroupCtx(id,ctx){
     <div class="dlg-act">${en.group?'<button class="dbtn cancel zh" id="gpremove">移出组</button>':''}<button class="dbtn cancel zh">取消</button><button class="dbtn ok zh">确定</button></div></div>`;
   h.appendChild(ov);
   const close=()=>{h.innerHTML='';};
-  ov.querySelectorAll('.gpick-opt').forEach(c=>{ c.onclick=()=>{ en.group=c.dataset.g; save(); close(); rerender(); }; });
+  ov.querySelectorAll('.gpick-opt').forEach(c=>{ c.onclick=()=>{ en.group=c.dataset.g; ensureGroup(en.group); maybeInheritGroupRepeat(en,ctx); save(); close(); rerender(); }; });
   if(ov.querySelector('#gpremove')) ov.querySelector('#gpremove').onclick=()=>{ en.group=null; save(); close(); rerender(); };
   ov.querySelector('.cancel').onclick=close; ov.onclick=e=>{if(e.target===ov)close();};
-  ov.querySelector('.ok').onclick=()=>{ const v=ov.querySelector('#gpname').value.trim(); if(v){en.group=v;save();} close(); rerender(); };
+  ov.querySelector('.ok').onclick=()=>{ const v=ov.querySelector('#gpname').value.trim(); if(v){en.group=v; ensureGroup(v); maybeInheritGroupRepeat(en,ctx); save();} close(); rerender(); };
   setTimeout(()=>ov.querySelector('#gpname').focus(),50);
 }
+// 把一条 entry 归入某组时，若该组有重复身份且这条还没有自己的规则，则自动继承
+function maybeInheritGroupRepeat(en,ctx){ if(ctx==='pool')return; if(en.rule)return; const g=en.group; if(!g)return;
+  if(state.groupRepeat && state.groupRepeat[g]){ const day=getDay(viewDate); const i=day.entries.indexOf(en); if(i<0)return;
+    const rule=ruleFromTemplate(state.groupRepeat[g], en.text, en.tags, g); state.rules.push(rule); day.entries.splice(i,1); reconcileRules(); } }
 async function manageGroup(gname,ctx){
   ctx=ctx||'today';
   const arr=ctx==='pool'?state.pool:getDay(viewDate).entries;
@@ -1175,7 +1192,7 @@ async function manageGroup(gname,ctx){
     ${ctx==='today'?`<div style="display:flex;gap:10px;margin-bottom:10px"><button class="dbtn cancel zh" id="gtop" style="flex:1">⤒ 移到最前</button><button class="dbtn cancel zh" id="gbot" style="flex:1">⤓ 移到最后</button></div>`:''}
     <button class="dbtn cancel zh" id="grepeat" style="width:100%">${hasRep?'↻ 编辑整组重复':'↻ 整组设为重复…'}</button>
     ${hasRep?`<button class="dbtn cancel zh" id="grepcancel" style="width:100%;margin-top:8px;color:#c96f68;border-color:rgba(201,111,104,0.4)">取消整组重复</button>`:''}
-    <div class="dlg-act"><button class="dbtn cancel zh" id="gdissolve">解散组</button><button class="dbtn cancel zh" id="gdel" style="color:#c96f68;border-color:rgba(201,111,104,0.4)">删除组</button><button class="dbtn cancel zh">取消</button><button class="dbtn ok zh">保存</button></div></div>`;
+    <div class="dlg-act"><button class="dbtn cancel zh" id="gdel" style="color:#c96f68;border-color:rgba(201,111,104,0.4)">删除组</button><button class="dbtn cancel zh">取消</button><button class="dbtn ok zh">保存</button></div></div>`;
   h.appendChild(ov);
   const close=()=>{h.innerHTML='';};
   let chosen=curIdx;
@@ -1201,26 +1218,14 @@ async function manageGroup(gname,ctx){
       // 成员规则的组名 + 组的重复身份 跟着迁
       (state.rules||[]).forEach(r=>{ if(r.group===gname)r.group=v; });
       if(state.groupRepeat&&state.groupRepeat[gname]){ state.groupRepeat[v]=state.groupRepeat[gname]; delete state.groupRepeat[gname]; }
+      // 花名册改名
+      if(!Array.isArray(state.groups))state.groups=[]; const gi=state.groups.indexOf(gname); if(gi>=0)state.groups[gi]=v; else if(!state.groups.includes(v))state.groups.push(v);
     }
     else { state.groupColors[gname]=chosen; }
     save(); close(); rerender(); };
-  ov.querySelector('#gdissolve').onclick=async()=>{ close(); const ok=await dialog({title:`解散组「${gname}」?`,msg:'组里的每一条记录都会<b>保留</b>，只是不再归在一起了（重复设置也跟着各自保留）。',ok:'解散',cancel:'取消'}); if(!ok)return;
-    arr.forEach(e=>{if(e.group===gname)e.group=null;});
-    (state.rules||[]).forEach(r=>{ if(r.group===gname)r.group=null; }); // 成员规则保留，只去掉分组关联
-    if(state.groupRepeat)delete state.groupRepeat[gname]; // 组没了，身份也没了（成员各自的规则还在）
-    save(); rerender(); };
   ov.querySelector('#gdel').onclick=async()=>{ close();
-    const openN=arr.filter(e=>e.group===gname&&!e.done).length;
-    const doneN=arr.filter(e=>e.group===gname&&e.done).length;
-    const msg = doneN>0
-      ? `未完成的 <b>${openN}</b> 件会删除；已完成的 <b>${doneN}</b> 件<b>保留</b>在组里（做过的事不抹去）。`
-      : `这个组里 <b>${openN}</b> 件未完成的事会删除。`;
-    const ok=await dialog({title:`删除组「${gname}」?`,msg,ok:'删除未完成',cancel:'取消'}); if(!ok)return;
-    const snap=JSON.parse(JSON.stringify(ctx==='pool'?{pool:state.pool}:{entries:getDay(viewDate).entries}));
-    if(ctx==='pool'){ state.pool=state.pool.filter(e=>!(e.group===gname&&!e.done)); }
-    else { const day=getDay(viewDate); day.entries=day.entries.filter(e=>!(e.group===gname&&!e.done)); }
-    save(); rerender(); renderViews();
-    toast(`「${gname}」清掉 ${openN} 件未完成`,'撤销',()=>{ if(ctx==='pool')state.pool=snap.pool; else getDay(viewDate).entries=snap.entries; save(); rerender(); renderViews(); }); };
+    const ok=await dialog({title:`删除组「${gname}」?`,msg:'今天及以后该组的事会<b>变回散件</b>（东西不删）、未来还没做的重复会停掉；<b>过去和已完成的历史照样保留</b>。',ok:'删除组',cancel:'取消'}); if(!ok)return;
+    deleteGroup(gname); rerender(); renderViews(); toast(`已删除组「${gname}」`); };
   setTimeout(()=>{const i=ov.querySelector('#grename');i.focus();i.select();},50);
 }
 // move a whole group across sections (preserve group name; only open items move from today)
@@ -1421,10 +1426,6 @@ function moveEntryToPool(id){ const day=getDay(viewDate); const idx=day.entries.
   state.pool.push({id:'p'+Date.now(),text:e.text,tags:[...(e.tags||[])],group:e.group||null}); // 保留分组、清除done
   if(state.poolFold){ state.poolFold=false; } // 展开以后让用户看到
   save(); renderEntries(); renderPool(); renderViews(); toast('移到「以后」了'); }
-function movePoolToToday(id){ const idx=state.pool.findIndex(p=>p.id===id); if(idx<0)return;
-  const p=state.pool[idx]; state.pool.splice(idx,1);
-  getDay(viewDate).entries.push({id:'e'+Date.now(),text:p.text,tags:[...(p.tags||[])],group:p.group||null,done:false}); // 保留分组、不自动勾
-  save(); renderEntries(); renderPool(); renderViews(); toast(isToday()?'移到「今天」了':'移过去了'); }
 // ===== 复制一条（就地、瞬间、永远未完成；id 带随机后缀防手抖撞车） =====
 const ICON_COPY='<svg width="13" height="13" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round" style="display:block"><rect x="9" y="9" width="11" height="11" rx="2.5"/><path d="M5 15H4a2 2 0 0 1-2-2V4a2 2 0 0 1 2-2h9a2 2 0 0 1 2 2v1"/></svg>';
 function copyEntry(id){ const day=getDay(viewDate); const i=day.entries.findIndex(e=>e.id===id); if(i<0)return;
@@ -1623,6 +1624,19 @@ function cancelGroupRepeat(gname){ const tk=todayKey(); const rids=(state.rules|
   state.rules=(state.rules||[]).filter(r=>!rids.includes(r.id));
   if(state.groupRepeat)delete state.groupRepeat[gname];
   save(); renderEntries(); renderPool(); renderViews(); toast(`已取消「${gname}」的整组重复`); }
+// 删除组（合并了旧"解散/删除"）：今天及以后该组未完成的变散件、未来未完成的重复实例清掉、规则停掉；
+// 过去 + 已完成的历史原样保留；组移出花名册。颜色保留（让历史记录维持原色）。
+function deleteGroup(gname){ const tk=todayKey();
+  const rids=(state.rules||[]).filter(r=>r.group===gname).map(r=>r.id);
+  for(const dk in state.days){ const d=state.days[dk];
+    if(dk>tk){ d.entries=(d.entries||[]).filter(e=>!(rids.includes(e.rule)&&!e.done)); } // 未来未完成的重复实例清掉
+    (d.entries||[]).forEach(e=>{ if(e.group===gname && !e.done){ e.group=null; if(rids.includes(e.rule)){ delete e.rule; delete e.due; e.time=null; e.tz=null; } } }); // 未完成→散件；已完成保留
+  }
+  (state.pool||[]).forEach(e=>{ if(e.group===gname)e.group=null; });
+  state.rules=(state.rules||[]).filter(r=>!rids.includes(r.id));
+  if(state.groupRepeat)delete state.groupRepeat[gname];
+  state.groups=(state.groups||[]).filter(g=>g!==gname); // 出花名册（颜色留着给历史）
+  save(); }
 function applyRepeatToGroup(gname,ctx){ ctx=ctx||'today';
   const existing = state.groupRepeat && state.groupRepeat[gname];
   const arr=ctx==='pool'?state.pool:getDay(viewDate).entries;
@@ -1688,14 +1702,31 @@ function openTodayMenu(anchorEl){
   const collapsed=allGroupsCollapsed(); const hasGroups=todayGroupNames().length>0;
   pop.innerHTML=`<div class="tm-item zh" data-a="select">多选移动</div>`
     +(hasGroups?`<div class="tm-item zh" data-a="collapse">${collapsed?'展开所有组':'收起所有组'}</div>`:'')
-    +(hasGroups||day_hasUng()?`<div class="tm-item zh" data-a="sort">排序</div>`:'');
+    +(hasGroups||day_hasUng()?`<div class="tm-item zh" data-a="sort">排序</div>`:'')
+    +`<div class="tm-item zh" data-a="groups">管理分组</div>`;
   h.appendChild(pop);
   pop.querySelector('[data-a="select"]').onclick=()=>{ h.innerHTML=''; enterSelectMode('today'); };
   const cb=pop.querySelector('[data-a="collapse"]'); if(cb)cb.onclick=()=>{ h.innerHTML=''; collapseAllGroups(!collapsed); };
   const sb=pop.querySelector('[data-a="sort"]'); if(sb)sb.onclick=()=>{ h.innerHTML=''; enterSortMode(); };
+  pop.querySelector('[data-a="groups"]').onclick=()=>{ h.innerHTML=''; groupManagerPanel(); };
   const a=anchorEl.getBoundingClientRect(); let top=a.bottom+8, left=a.right-150; if(left<12)left=12;
   pop.style.top=top+'px'; pop.style.left=left+'px';
   setTimeout(()=>{ const close=e=>{ if(!pop.contains(e.target)){h.innerHTML='';document.removeEventListener('mousedown',close);} }; document.addEventListener('mousedown',close); },0);
+}
+// 分组花名册：列出所有组（含当前没有 active entry 的空组），可改名/换色/设重复/删除
+function groupManagerPanel(){ const h=document.getElementById('dlghost'); h.innerHTML='';
+  const ov=document.createElement('div'); ov.className='ov';
+  const card=document.createElement('div'); card.className='dlg rep-dlg';
+  const groups=state.groups||[];
+  const activeCount=(g)=>{ let n=0; for(const dk in state.days)(state.days[dk].entries||[]).forEach(e=>{ if(e.group===g&&!e.done)n++; }); (state.pool||[]).forEach(e=>{ if(e.group===g)n++; }); return n; };
+  let body = groups.length ? groups.map(g=>{ const col=groupColor(g); const rep=state.groupRepeat&&state.groupRepeat[g]; const n=activeCount(g);
+    return `<div class="gm-li" data-g="${esc(g)}"><span class="sort-dot" style="background:${col.line}"></span>
+      <div class="gm-main"><div class="gm-name zh">${esc(g)}</div><div class="gm-meta zh">${n?n+' 件进行中':'空组'}${rep?' · ↻ 重复':''}</div></div><span class="gm-go zh">管理 ›</span></div>`;
+  }).join('') : '<div class="rep-hint zh" style="padding:18px 4px">还没有分组。给任意一条事「归到一组」就会建立。</div>';
+  card.innerHTML=`<div class="dlg-t zh">管理分组</div><div class="rule-list">${body}</div><div class="dlg-act"><button class="dbtn ok zh" id="gm-close">关闭</button></div>`;
+  ov.appendChild(card); h.appendChild(ov);
+  const close=()=>{h.innerHTML='';}; ov.onclick=e=>{if(e.target===ov)close();}; card.querySelector('#gm-close').onclick=close;
+  card.querySelectorAll('.gm-li').forEach(li=>{ li.onclick=()=>{ close(); manageGroup(li.dataset.g,'today'); }; });
 }
 function day_hasUng(){ return getDay(viewDate).entries.some(e=>!e.done&&!e.group); }
 function enterSortMode(){ selectMode=null; sortMode=true; renderEntries(); }
