@@ -21,6 +21,7 @@
   --spine: rgba(80,75,95,0.12);
 
   --accent:#f29db1; --accent-deep:#dd7393;
+  --accent-tint:#fdeef2;
 
   --display:'Quicksand',sans-serif;
   --hand:'Long Cang','LXGW WenKai TC',cursive;
@@ -72,26 +73,25 @@ body {
 
 .brand{ font-family:var(--hand); font-size:46px; color:var(--ink); display:flex; align-items:center; gap:12px; line-height:1; }
 .brand .logo{ width:38px; height:38px; flex-shrink:0; }
-.brand-sub{ font-family:var(--zh); font-size:13.5px; color:var(--ink-soft); margin-top:9px; letter-spacing:0.04em; }
 
 .datebar{ display:flex; align-items:center; gap:6px; margin-top:20px; margin-bottom:6px; }
 .darr{ font-family:var(--display); font-weight:600; font-size:19px; color:var(--ink-faint); cursor:pointer;
   padding:3px 9px; user-select:none; transition:all 0.2s; border-radius:9px; line-height:1; }
-.darr:hover{ color:var(--accent-deep); background:#fdeef2; }
+.darr:hover{ color:var(--accent-deep); background:var(--accent-tint); }
 .dlabel{ flex:1; text-align:center; font-family:var(--display); font-weight:600; font-size:16px; cursor:pointer; border-radius:8px; padding:3px 6px; transition:background 0.18s; }
-.dlabel:hover{ background:#fdeef2; }
+.dlabel:hover{ background:var(--accent-tint); }
 
 /* calendar popup */
 .cal-pop{ position:fixed; z-index:260; width:280px; background:var(--paper); border:1px solid var(--line-strong); border-radius:14px; padding:14px; box-shadow:0 10px 36px rgba(120,110,140,0.2); animation:din 0.18s cubic-bezier(0.16,1,0.3,1); }
 .cal-head{ display:flex; align-items:center; justify-content:space-between; margin-bottom:10px; }
 .cal-title{ font-family:var(--zh); font-size:14px; color:var(--ink); font-weight:500; }
 .cal-nav{ font-family:var(--display); font-weight:600; font-size:18px; color:var(--ink-faint); cursor:pointer; padding:2px 10px; border-radius:8px; transition:all 0.15s; }
-.cal-nav:hover{ color:var(--accent-deep); background:#fdeef2; }
+.cal-nav:hover{ color:var(--accent-deep); background:var(--accent-tint); }
 .cal-grid{ display:grid; grid-template-columns:repeat(7,1fr); gap:2px; }
 .cal-wd{ font-family:var(--zh); font-size:10px; color:var(--ink-faint); text-align:center; padding:4px 0; }
 .cal-cell{ position:relative; aspect-ratio:1; display:flex; align-items:center; justify-content:center; font-family:var(--display); font-size:12.5px; color:var(--ink); cursor:pointer; border-radius:8px; transition:background 0.12s; }
 .cal-cell.empty{ cursor:default; }
-.cal-cell:not(.empty):hover{ background:#fdeef2; }
+.cal-cell:not(.empty):hover{ background:var(--accent-tint); }
 .cal-cell.today{ font-weight:700; color:var(--accent-deep); }
 .cal-cell.view{ background:var(--accent); color:#fff; }
 .cal-cell.view:hover{ background:var(--accent-deep); }
@@ -99,16 +99,16 @@ body {
 .cal-cell.view .cal-dot{ background:#fff; }
 .cal-foot{ margin-top:10px; text-align:center; }
 .cal-today-btn{ font-family:var(--zh); font-size:11.5px; color:var(--accent-deep); cursor:pointer; padding:4px 12px; border-radius:999px; transition:background 0.15s; }
-.cal-today-btn:hover{ background:#fdeef2; }
+.cal-today-btn:hover{ background:var(--accent-tint); }
 /* move-to-day picker (reuses .cal-* below) */
 .mv-pop{ width:280px; }
 .mv-title{ font-family:var(--zh); font-size:13px; color:var(--ink-soft); margin-bottom:10px; letter-spacing:0.02em; }
 .mv-quick{ display:flex; gap:6px; margin-bottom:8px; }
 .mv-q{ flex:1; text-align:center; font-family:var(--zh); font-size:13px; color:var(--ink); background:rgba(80,75,95,0.05); border-radius:9px; padding:7px 0; cursor:pointer; transition:all 0.15s; }
-.mv-q:hover{ background:#fdeef2; color:var(--accent-deep); }
+.mv-q:hover{ background:var(--accent-tint); color:var(--accent-deep); }
 .mv-q.now{ color:var(--accent-deep); font-weight:600; }
 .mv-pool{ font-family:var(--zh); font-size:12.5px; color:var(--ink-soft); cursor:pointer; padding:6px 8px; border-radius:9px; transition:all 0.15s; }
-.mv-pool:hover{ background:#fdeef2; color:var(--accent-deep); }
+.mv-pool:hover{ background:var(--accent-tint); color:var(--accent-deep); }
 .mv-div{ height:1px; background:var(--line); margin:10px 0; }
 /* repeat: badges + overdue */
 .emeta{ display:flex; align-items:center; gap:7px; margin-top:4px; }
@@ -123,12 +123,12 @@ body {
 .rep-seg{ display:flex; gap:8px; }
 .rep-seg button{ flex:1; display:flex; flex-direction:column; gap:2px; align-items:center; font-family:var(--zh); font-size:14px; color:var(--ink); background:rgba(80,75,95,0.05); border:1px solid transparent; border-radius:11px; padding:9px 6px; cursor:pointer; transition:all 0.15s; }
 .rep-seg button small{ font-size:10.5px; color:var(--ink-faint); }
-.rep-seg button.on{ background:#fdeef2; border-color:var(--accent); color:var(--accent-deep); }
+.rep-seg button.on{ background:var(--accent-tint); border-color:var(--accent); color:var(--accent-deep); }
 .rep-seg button.on small{ color:var(--accent-deep); }
 .rep-seg.sm button{ flex-direction:row; font-size:13px; padding:7px 6px; }
 .ftype-row{ display:flex; flex-wrap:wrap; gap:6px; }
 .ftype{ font-family:var(--zh); font-size:12.5px; color:var(--ink); background:rgba(80,75,95,0.05); border:1px solid transparent; border-radius:999px; padding:5px 11px; cursor:pointer; transition:all 0.15s; }
-.ftype.on{ background:#fdeef2; border-color:var(--accent); color:var(--accent-deep); }
+.ftype.on{ background:var(--accent-tint); border-color:var(--accent); color:var(--accent-deep); }
 .rep-detail{ margin-top:9px; }
 .rep-row{ display:flex; align-items:center; gap:7px; flex-wrap:wrap; font-family:var(--zh); font-size:14px; color:var(--ink); }
 .rep-in{ font-family:var(--zh); font-size:14px; color:var(--ink); border:1px solid var(--line-strong); border-radius:9px; padding:6px 9px; background:var(--paper); outline:none; }
@@ -154,12 +154,12 @@ body {
 .rule-meta2{ font-size:11.5px; color:var(--ink-faint); margin-top:2px; }
 .rule-acts{ display:flex; gap:3px; }
 .rbtn{ width:26px; height:26px; border-radius:8px; display:flex; align-items:center; justify-content:center; font-size:14px; color:var(--ink-faint); cursor:pointer; transition:all 0.15s; }
-.rbtn:hover{ background:#fdeef2; color:var(--accent-deep); }
+.rbtn:hover{ background:var(--accent-tint); color:var(--accent-deep); }
 .rbtn.del:hover{ background:rgba(201,111,104,0.12); color:#c96f68; }
 /* 整理菜单 */
 .today-menu{ padding:6px; min-width:140px; }
 .tm-item{ font-size:14px; color:var(--ink); padding:9px 12px; border-radius:9px; cursor:pointer; transition:background 0.12s; }
-.tm-item:hover{ background:#fdeef2; color:var(--accent-deep); }
+.tm-item:hover{ background:var(--accent-tint); color:var(--accent-deep); }
 /* 排序模式 */
 .sort-banner{ display:flex; align-items:center; justify-content:space-between; font-size:12.5px; color:var(--ink-soft); background:rgba(80,75,95,0.05); border-radius:10px; padding:8px 12px; margin-bottom:12px; }
 .sort-banner .sort-done{ color:var(--accent-deep); font-weight:600; cursor:pointer; padding:2px 10px; border-radius:999px; }
@@ -175,7 +175,7 @@ body {
   text-transform:uppercase; color:#fff; background:var(--accent); border-radius:999px; padding:1px 7px; margin-left:7px; vertical-align:middle; }
 .dlabel .rel.future{ background:#94b8e0; } .dlabel .rel.past{ background:var(--ink-faint); }
 .djump{ font-family:var(--zh); font-size:11.5px; color:var(--accent-deep); cursor:pointer; padding:4px 8px; border-radius:9px; white-space:nowrap; transition:background 0.2s; }
-.djump:hover{ background:#fdeef2; }
+.djump:hover{ background:var(--accent-tint); }
 
 .mood{ margin:18px 0 4px; padding:13px 16px; background:rgba(255,255,255,0.7); border:1px solid var(--line); border-radius:13px; }
 .mood-title{ font-family:var(--zh); font-size:12px; color:var(--ink-soft); margin-bottom:9px; }
@@ -268,7 +268,7 @@ body.dragging{ cursor:grabbing; user-select:none; }
 .entry:hover .eact{ opacity:1; }
 .mbtn{ width:25px; height:25px; border-radius:8px; border:none; background:transparent; color:var(--ink-faint);
   cursor:pointer; font-size:14px; line-height:1; display:flex; align-items:center; justify-content:center; transition:all 0.15s; }
-.mbtn:hover{ background:#fdeef2; color:var(--accent-deep); }
+.mbtn:hover{ background:var(--accent-tint); color:var(--accent-deep); }
 .empty{ font-family:var(--zh); font-size:13.5px; color:var(--ink-faint); padding:8px 4px; }
 
 /* done fold */
@@ -401,10 +401,6 @@ body.dragging{ cursor:grabbing; user-select:none; }
 .dbtn.cancel:hover{ color:var(--ink); border-color:var(--ink-soft); }
 .dbtn.ok{ background:var(--accent-deep); color:#fff; }
 .dbtn.ok:hover{ opacity:0.9; }
-.mpick{ position:fixed; z-index:250; background:var(--paper); border:1px solid var(--line-strong); border-radius:12px; padding:9px; box-shadow:0 8px 24px rgba(0,0,0,0.13); display:flex; gap:7px; animation:din 0.16s; }
-.mpick .mo{ width:26px; height:26px; border-radius:50%; cursor:pointer; border:2px solid transparent; transition:transform 0.12s; }
-.mpick .mo:hover{ transform:scale(1.18); }
-.mpick .mo.clr{ background:#ece9f0; display:flex; align-items:center; justify-content:center; font-size:13px; color:var(--ink-faint); }
 
 .fade-in{ animation:fadeIn 0.5s ease-out backwards; }
 @keyframes fadeIn{from{opacity:0;transform:translateY(10px);}to{opacity:1;transform:none;}}
@@ -709,6 +705,20 @@ function reconcileRules(){ if(!state.rules||!state.rules.length)return; let chan
     }
   });
   if(changed)save(); }
+// 随缘：打勾完成那一刻，把下一期生成到它该在的那天（daily=明天），让你能提前安排。
+// horizon=1（区别于必达的 6），保住「一次只有一个」的本意；anyOpenInstance 守卫防重复；until 照样尊重。
+function advanceFlow(rule){
+  if(!rule || rule.mode!=='flow' || rule.paused) return;
+  if(anyOpenInstance(rule.id)) return;                 // 已有一个 open 的下一期，不重复生成
+  const limD=rule.until&&rule.until.type==='date'?rule.until.date:null;
+  const limN=rule.until&&rule.until.type==='count'?rule.until.n:null;
+  if(limN!=null && countCompleted(rule.id)>=limN) return; // 次数上限（已含刚完成这次）→ 收工
+  const nd=rule.nextDue;
+  if(!nd) return;
+  if(limD!=null && nd>limD) return;                    // 超过截止日 → 不再生成
+  genInstance(rule, nd, nd);                            // 落在 nextDue 那天，due 也是那天
+  rule.nextDue=occOnOrAfter(rule.freq, addDays(nd,1));
+}
 // ----- 频率 → 人话 -----
 const _WD=['周日','周一','周二','周三','周四','周五','周六'];
 function freqLabel(f){ switch(f.type){
@@ -827,7 +837,7 @@ function onMove(e){
     drag.active=true; drag.kind=drag.pending.kind; drag.id=drag.pending.id; drag.pending=null;
     document.body.classList.add('dragging');
     let label='';
-    if(drag.kind==='entry'){ const en=findEntryAnyDay(drag.id); label=en?en.text:''; }
+    if(drag.kind==='entry'){ const en=findEntryToday(drag.id); label=en?en.text:''; }
     else if(drag.kind==='pool'){ const p=state.pool.find(x=>x.id===drag.id); label=p?p.text:''; }
     else if(drag.kind==='group'){ label=drag.id; }
     drag.ghost=document.createElement('div'); drag.ghost.className='drag-ghost zh'; drag.ghost.textContent=label;
@@ -856,7 +866,7 @@ function rowOf(kind,id){
   return document.querySelector(`#entries .entry[data-id="${id}"]`);
 }
 function cssEsc(s){ return String(s).replace(/["\\]/g,'\\$&'); }
-function findEntryAnyDay(id){ const day=getDay(viewDate); return day.entries.find(e=>e.id===id); }
+function findEntryToday(id){ const day=getDay(viewDate); return day.entries.find(e=>e.id===id); }
 function clearDropMarks(){ document.querySelectorAll('.drop-line').forEach(el=>el.remove());
   document.querySelectorAll('.drop-zone-hot').forEach(el=>el.classList.remove('drop-zone-hot')); }
 function updateDropIndicator(x,y){
@@ -1143,7 +1153,8 @@ function toggleDone(id){ const day=getDay(viewDate); const idx=day.entries.findI
   // ii：必达的某期被完成时，搬到「今天」并记在今天（你哪天做的就记哪天）。该期的到期日已在水位内，不会再回填。
   let moved=false;
   if(en.done && en.rule){ const rule=(state.rules||[]).find(r=>r.id===en.rule);
-    if(rule && rule.mode==='must'){ const tk=todayKey(); if(viewDate!==tk){ day.entries.splice(idx,1); getDay(tk).entries.unshift(en); moved=true; } } }
+    if(rule && rule.mode==='must'){ const tk=todayKey(); if(viewDate!==tk){ day.entries.splice(idx,1); getDay(tk).entries.unshift(en); moved=true; } }
+    else if(rule && rule.mode==='flow'){ advanceFlow(rule); } }   // 随缘：完成即预生成下一期，可提前安排
   save(); renderEntries(); renderViews();
   if(moved) toast('已完成 · 记在今天'); }
 // existing group names in a given context
