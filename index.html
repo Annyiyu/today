@@ -261,7 +261,6 @@ body.dragging{ cursor:grabbing; user-select:none; }
 .tchip-x{ display:inline-flex; align-items:center; justify-content:center; width:0; overflow:hidden; opacity:0; font-size:13px; line-height:1; cursor:pointer; transition:width 0.15s, opacity 0.15s, margin 0.15s; margin-left:0; }
 .tchip:hover .tchip-x{ width:13px; opacity:0.8; margin-left:4px; margin-right:-2px; }
 .tchip-x:hover{ opacity:1; }
-.topt{ cursor:grab; }
 .topt.chip-src{ opacity:0.3; }
 .chip-drop{ display:inline-block; width:2px; height:16px; background:var(--accent); border-radius:2px; vertical-align:middle; margin:0 1px; animation:fadeIn 0.15s; }
 .eact{ display:flex; gap:1px; opacity:0; transition:opacity 0.18s; }
@@ -312,7 +311,7 @@ body.dragging{ cursor:grabbing; user-select:none; }
 .add-trig:hover{ border-color:var(--accent); color:var(--accent-deep); background:rgba(255,255,255,0.5); }
 
 .tagpick{ display:flex; flex-wrap:wrap; gap:5px; margin-top:9px; padding:0 2px; align-items:center; }
-.topt{ font-family:var(--zh); font-size:11.5px; padding:3px 11px; border-radius:999px; cursor:pointer; border:1.5px solid; background:transparent; user-select:none; transition:all 0.15s; }
+.topt{ font-family:var(--zh); font-size:11.5px; padding:3px 11px; border-radius:999px; cursor:grab; border:1.5px solid; background:transparent; user-select:none; transition:all 0.15s; }
 .topt-add{ font-family:var(--zh); font-size:11.5px; padding:3px 9px; border-radius:999px; cursor:pointer; border:1.5px dashed var(--ink-faint); color:var(--ink-soft); background:transparent; }
 .topt-add:hover{ border-color:var(--accent); color:var(--accent-deep); }
 .topt-wrap{ display:inline-flex; align-items:center; position:relative; }
@@ -957,37 +956,38 @@ function insertEntryAt(day,entry,beforeId){
 // ---- chip reorder: long-press/drag a chip to reorder within its row; plain click = onClick ----
 // getArr() returns the ordered array of ids; setArr(newArr) commits; onClick(id) handles tap; rerender() redraws
 function makeChipReorder(chipEl, id, container, getArr, setArr, onClick, rerender){
-  let cd=null; // {x,y,started}
-  const start=(e)=>{ if(e.button!==undefined&&e.button!==0)return; const pt=e.touches?e.touches[0]:e;
-    cd={x:pt.clientX,y:pt.clientY,started:false,ghost:null};
-    document.addEventListener('mousemove',mv,{passive:false}); document.addEventListener('mouseup',up);
-    document.addEventListener('touchmove',mv,{passive:false}); document.addEventListener('touchend',up); document.addEventListener('touchcancel',up); };
-  const mv=(e)=>{ if(!cd)return; const pt=e.touches?e.touches[0]:e; const dx=pt.clientX-cd.x, dy=pt.clientY-cd.y;
+  // Pointer Events + 指针捕获：桌面/触摸统一，捕获后移动事件不会丢；touch-action:none 防止触摸时滚页抢走手势。
+  let cd=null; // {x,y,started,ghost,targetIdx,pid}
+  const onMove=(e)=>{ if(!cd)return; const dx=e.clientX-cd.x, dy=e.clientY-cd.y;
     if(!cd.started){ if(Math.sqrt(dx*dx+dy*dy)<6) return; cd.started=true; document.body.classList.add('dragging');
       chipEl.classList.add('chip-src'); cd.ghost=document.createElement('div'); cd.ghost.className='drag-ghost zh'; cd.ghost.textContent=chipEl.textContent; document.body.appendChild(cd.ghost); }
     e.preventDefault();
-    cd.ghost.style.left=(pt.clientX+12)+'px'; cd.ghost.style.top=(pt.clientY+12)+'px';
-    // find insertion among sibling chips
-    const chips=Array.from(container.querySelectorAll('[data-chip-id]')).filter(c=>c!==chipEl);
+    cd.ghost.style.left=(e.clientX+12)+'px'; cd.ghost.style.top=(e.clientY+12)+'px';
+    // find insertion among sibling chips (源节点按 id 可靠排除)
+    const chips=Array.from(container.querySelectorAll('[data-chip-id]')).filter(c=>c.dataset.chipId!==String(id));
     let idx=chips.length;
-    for(let i=0;i<chips.length;i++){ const r=chips[i].getBoundingClientRect(); if(pt.clientX<r.left+r.width/2 && pt.clientY<r.bottom){ idx=i; break; } }
+    for(let i=0;i<chips.length;i++){ const r=chips[i].getBoundingClientRect(); if(e.clientX<r.left+r.width/2 && e.clientY<r.bottom){ idx=i; break; } }
     container.querySelectorAll('.chip-drop').forEach(m=>m.remove());
     const mark=document.createElement('span'); mark.className='chip-drop';
     if(idx===chips.length){ if(chips.length)chips[chips.length-1].after(mark); else container.appendChild(mark); } else chips[idx].before(mark);
     cd.targetIdx=idx;
   };
-  const up=()=>{ document.removeEventListener('mousemove',mv); document.removeEventListener('mouseup',up);
-    document.removeEventListener('touchmove',mv); document.removeEventListener('touchend',up); document.removeEventListener('touchcancel',up);
-    if(!cd){ return; }
-    if(!cd.started){ cd=null; onClick(id); return; } // was a tap
-    // commit reorder
+  const onUp=()=>{ if(!cd)return;
+    chipEl.removeEventListener('pointermove',onMove); chipEl.removeEventListener('pointerup',onUp); chipEl.removeEventListener('pointercancel',onUp);
+    try{ chipEl.releasePointerCapture(cd.pid); }catch(_){}
+    if(!cd.started){ cd=null; onClick(id); return; } // 没动 → 当成点按
     document.body.classList.remove('dragging'); if(cd.ghost)cd.ghost.remove();
     container.querySelectorAll('.chip-drop').forEach(m=>m.remove()); chipEl.classList.remove('chip-src');
-    const arr=getArr(); const from=arr.indexOf(id); let to=cd.targetIdx;
-    if(from>=0){ const a=[...arr]; a.splice(from,1); if(from<to)to--; a.splice(to,0,id); setArr(a); }
+    const arr=getArr(); const from=arr.indexOf(id); const to=cd.targetIdx;
+    if(from>=0 && to!=null){ const a=[...arr]; a.splice(from,1); a.splice(to,0,id); setArr(a); } // chips 已排除源，to 即落位
     cd=null; rerender();
   };
-  chipEl.addEventListener('mousedown',start); chipEl.addEventListener('touchstart',start,{passive:false});
+  const onDown=(e)=>{ if(e.button!==undefined&&e.button!==0)return;
+    cd={x:e.clientX,y:e.clientY,started:false,ghost:null,targetIdx:null,pid:e.pointerId};
+    try{ chipEl.setPointerCapture(e.pointerId); }catch(_){}
+    chipEl.addEventListener('pointermove',onMove); chipEl.addEventListener('pointerup',onUp); chipEl.addEventListener('pointercancel',onUp); };
+  chipEl.style.touchAction='none';
+  chipEl.addEventListener('pointerdown',onDown);
 }
 // build the displayed tag-chip row for an entry/pool item; chips are reorderable (drag) + hover × to remove from this item
 function buildTagChips(item){
